@@ -1,0 +1,572 @@
+import React, { useState } from 'react';
+import {
+  View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity,
+  Switch, Platform, KeyboardAvoidingView,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import * as Haptics from 'expo-haptics';
+import { format } from 'date-fns';
+import { RootStackParamList, TaskKind, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit } from '../types';
+import { addTask } from '../storage';
+import {
+  scheduleExternalTaskNotifications,
+  scheduleInternalTaskNotification,
+  scheduleInterdayTaskNotifications,
+} from '../notifications';
+import { COLORS, FONT, SPACING, RADIUS } from '../utils/theme';
+import { showAlert } from '../utils/alert';
+
+type RouteParams = RouteProp<RootStackParamList, 'AddTask'>;
+
+// Simple uuid-like id without external dependency
+function makeId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const RECURRENCE_UNITS: RecurrenceUnit[] = ['days', 'weeks', 'months'];
+const GROUPS: InterdayGroup[] = ['morning', 'afternoon', 'evening', 'none'];
+const EARLY_REMINDER_OPTIONS = [0, 1, 2, 3, 7, 14];
+
+export default function AddTaskScreen() {
+  const navigation = useNavigation();
+  const route = useRoute<RouteParams>();
+  const kind = route.params.kind;
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          <Text style={styles.formTitle}>
+            {kind === 'external' ? '📅 New Appointment' : kind === 'internal' ? '✅ New To-Do' : '🔁 New Daily Task'}
+          </Text>
+
+          {kind === 'external' && <ExternalForm navigation={navigation} />}
+          {kind === 'internal' && <InternalForm navigation={navigation} />}
+          {kind === 'interday' && <InterdayForm navigation={navigation} />}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+// ─── External Form ────────────────────────────────────────────────────────────
+
+function ExternalForm({ navigation }: { navigation: any }) {
+  const [title, setTitle] = useState('');
+  const [notes, setNotes] = useState('');
+  const [dateTime, setDateTime] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurEvery, setRecurEvery] = useState('1');
+  const [recurUnit, setRecurUnit] = useState<RecurrenceUnit>('weeks');
+  const [earlyReminderDays, setEarlyReminderDays] = useState(0);
+  const [dayOfReminder, setDayOfReminder] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!title.trim()) { showAlert('Please enter a title'); return; }
+    setSaving(true);
+    try {
+      const recurrence: Recurrence | undefined = isRecurring
+        ? { every: parseInt(recurEvery) || 1, unit: recurUnit }
+        : undefined;
+
+      const task: ExternalTask = {
+        id: makeId(),
+        kind: 'external',
+        title: title.trim(),
+        notes: notes.trim() || undefined,
+        dateTime: dateTime.toISOString(),
+        recurrence,
+        earlyReminderDays,
+        dayOfReminder,
+        notificationIds: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      const ids = await scheduleExternalTaskNotifications(task);
+      await addTask({ ...task, notificationIds: ids });
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      navigation.goBack();
+    } catch (e) {
+      showAlert('Error', 'Could not save task. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <FormField label="Title">
+        <TextInput
+          style={styles.input}
+          value={title}
+          onChangeText={setTitle}
+          placeholder="e.g. Doctor appointment"
+          placeholderTextColor={COLORS.TEXT_MUTED}
+          returnKeyType="done"
+        />
+      </FormField>
+
+      <FormField label="Date">
+        <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowDatePicker(true)}>
+          <Ionicons name="calendar-outline" size={22} color={COLORS.PRIMARY} />
+          <Text style={styles.pickerBtnText}>{format(dateTime, 'EEEE, MMMM d, yyyy')}</Text>
+        </TouchableOpacity>
+        {showDatePicker && (
+          <DateTimePicker
+            value={dateTime}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'inline' : 'default'}
+            minimumDate={new Date()}
+            onChange={(e: DateTimePickerEvent, d?: Date) => {
+              setShowDatePicker(Platform.OS === 'ios');
+              if (d) setDateTime(prev => { const next = new Date(prev); next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); return next; });
+            }}
+          />
+        )}
+      </FormField>
+
+      <FormField label="Time">
+        <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowTimePicker(true)}>
+          <Ionicons name="time-outline" size={22} color={COLORS.PRIMARY} />
+          <Text style={styles.pickerBtnText}>{format(dateTime, 'h:mm a')}</Text>
+        </TouchableOpacity>
+        {showTimePicker && (
+          <DateTimePicker
+            value={dateTime}
+            mode="time"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(e: DateTimePickerEvent, d?: Date) => {
+              setShowTimePicker(Platform.OS === 'ios');
+              if (d) setDateTime(prev => { const next = new Date(prev); next.setHours(d.getHours(), d.getMinutes()); return next; });
+            }}
+          />
+        )}
+      </FormField>
+
+      <FormField label="Recurring?">
+        <View style={styles.toggleRow}>
+          <Switch value={isRecurring} onValueChange={setIsRecurring} thumbColor={isRecurring ? COLORS.PRIMARY : undefined} trackColor={{ true: COLORS.PRIMARY_LIGHT }} />
+          <Text style={styles.toggleLabel}>{isRecurring ? 'Yes' : 'No'}</Text>
+        </View>
+        {isRecurring && (
+          <View style={styles.recurRow}>
+            <Text style={styles.recurLabel}>Every</Text>
+            <TextInput
+              style={[styles.input, styles.smallInput]}
+              value={recurEvery}
+              onChangeText={setRecurEvery}
+              keyboardType="number-pad"
+              maxLength={2}
+            />
+            <View style={styles.unitPicker}>
+              {RECURRENCE_UNITS.map(u => (
+                <TouchableOpacity
+                  key={u}
+                  style={[styles.unitBtn, recurUnit === u && styles.unitBtnActive]}
+                  onPress={() => setRecurUnit(u)}
+                >
+                  <Text style={[styles.unitLabel, recurUnit === u && styles.unitLabelActive]}>{u}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+      </FormField>
+
+      <FormField label="Early reminder">
+        <View style={styles.chipRow}>
+          {EARLY_REMINDER_OPTIONS.map(n => (
+            <TouchableOpacity
+              key={n}
+              style={[styles.chip, earlyReminderDays === n && styles.chipActive]}
+              onPress={() => setEarlyReminderDays(n)}
+            >
+              <Text style={[styles.chipLabel, earlyReminderDays === n && styles.chipLabelActive]}>
+                {n === 0 ? 'None' : `${n}d`}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </FormField>
+
+      <FormField label="Remind on the day">
+        <View style={styles.toggleRow}>
+          <Switch value={dayOfReminder} onValueChange={setDayOfReminder} thumbColor={dayOfReminder ? COLORS.PRIMARY : undefined} trackColor={{ true: COLORS.PRIMARY_LIGHT }} />
+          <Text style={styles.toggleLabel}>{dayOfReminder ? 'Yes' : 'No'}</Text>
+        </View>
+      </FormField>
+
+      <FormField label="Notes (optional)">
+        <TextInput
+          style={[styles.input, styles.notesInput]}
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Any extra details..."
+          placeholderTextColor={COLORS.TEXT_MUTED}
+          multiline
+          numberOfLines={3}
+        />
+      </FormField>
+
+      <SaveButton onPress={handleSave} loading={saving} />
+    </>
+  );
+}
+
+// ─── Internal Form ────────────────────────────────────────────────────────────
+
+function InternalForm({ navigation }: { navigation: any }) {
+  const [title, setTitle] = useState('');
+  const [notes, setNotes] = useState('');
+  const [dueDate, setDueDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [intervalDays, setIntervalDays] = useState(7);
+  const [saving, setSaving] = useState(false);
+
+  const INTERVAL_OPTIONS = [0, 1, 3, 7, 14, 30];
+
+  const handleSave = async () => {
+    if (!title.trim()) { showAlert('Please enter a title'); return; }
+    setSaving(true);
+    try {
+      const task: InternalTask = {
+        id: makeId(),
+        kind: 'internal',
+        title: title.trim(),
+        notes: notes.trim() || undefined,
+        nextDueDate: format(dueDate, 'yyyy-MM-dd'),
+        intervalDays,
+        notificationIds: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      const ids = await scheduleInternalTaskNotification(task);
+      await addTask({ ...task, notificationIds: ids });
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      navigation.goBack();
+    } catch (e) {
+      showAlert('Error', 'Could not save task.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <FormField label="Title">
+        <TextInput
+          style={styles.input}
+          value={title}
+          onChangeText={setTitle}
+          placeholder="e.g. Fill pill box"
+          placeholderTextColor={COLORS.TEXT_MUTED}
+          returnKeyType="done"
+        />
+      </FormField>
+
+      <FormField label="First due date">
+        <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowDatePicker(true)}>
+          <Ionicons name="calendar-outline" size={22} color={COLORS.PRIMARY} />
+          <Text style={styles.pickerBtnText}>{format(dueDate, 'EEEE, MMMM d, yyyy')}</Text>
+        </TouchableOpacity>
+        {showDatePicker && (
+          <DateTimePicker
+            value={dueDate}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'inline' : 'default'}
+            onChange={(e: DateTimePickerEvent, d?: Date) => {
+              setShowDatePicker(Platform.OS === 'ios');
+              if (d) setDueDate(d);
+            }}
+          />
+        )}
+      </FormField>
+
+      <FormField label="Remind me every">
+        <View style={styles.chipRow}>
+          {INTERVAL_OPTIONS.map(n => (
+            <TouchableOpacity
+              key={n}
+              style={[styles.chip, intervalDays === n && styles.chipActive]}
+              onPress={() => setIntervalDays(n)}
+            >
+              <Text style={[styles.chipLabel, intervalDays === n && styles.chipLabelActive]}>
+                {n === 0 ? 'Once' : `${n}d`}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </FormField>
+
+      <FormField label="Notes (optional)">
+        <TextInput
+          style={[styles.input, styles.notesInput]}
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Any extra details..."
+          placeholderTextColor={COLORS.TEXT_MUTED}
+          multiline
+          numberOfLines={3}
+        />
+      </FormField>
+
+      <SaveButton onPress={handleSave} loading={saving} />
+    </>
+  );
+}
+
+// ─── Interday Form ────────────────────────────────────────────────────────────
+
+function InterdayForm({ navigation }: { navigation: any }) {
+  const [title, setTitle] = useState('');
+  const [notes, setNotes] = useState('');
+  const [hasTime, setHasTime] = useState(false);
+  const [timeValue, setTimeValue] = useState(new Date());
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [group, setGroup] = useState<InterdayGroup>('morning');
+  const [activeDays, setActiveDays] = useState<number[]>([]);
+  const [canDefer, setCanDefer] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const toggleDay = (day: number) => {
+    setActiveDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day],
+    );
+  };
+
+  const handleSave = async () => {
+    if (!title.trim()) { showAlert('Please enter a title'); return; }
+    setSaving(true);
+    try {
+      const timeSlot = hasTime ? format(timeValue, 'HH:mm') : undefined;
+
+      const task: InterdayTask = {
+        id: makeId(),
+        kind: 'interday',
+        title: title.trim(),
+        notes: notes.trim() || undefined,
+        timeSlot,
+        group,
+        activeDays,
+        canDefer,
+        notificationIds: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      const ids = await scheduleInterdayTaskNotifications(task);
+      await addTask({ ...task, notificationIds: ids });
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      navigation.goBack();
+    } catch (e) {
+      showAlert('Error', 'Could not save task.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <FormField label="Title">
+        <TextInput
+          style={styles.input}
+          value={title}
+          onChangeText={setTitle}
+          placeholder="e.g. Take morning medicine"
+          placeholderTextColor={COLORS.TEXT_MUTED}
+          returnKeyType="done"
+        />
+      </FormField>
+
+      <FormField label="Has a specific time?">
+        <View style={styles.toggleRow}>
+          <Switch value={hasTime} onValueChange={setHasTime} thumbColor={hasTime ? COLORS.PRIMARY : undefined} trackColor={{ true: COLORS.PRIMARY_LIGHT }} />
+          <Text style={styles.toggleLabel}>{hasTime ? 'Yes' : 'No (use group time)'}</Text>
+        </View>
+        {hasTime && (
+          <>
+            <TouchableOpacity style={[styles.pickerBtn, { marginTop: SPACING.SM }]} onPress={() => setShowTimePicker(true)}>
+              <Ionicons name="time-outline" size={22} color={COLORS.PRIMARY} />
+              <Text style={styles.pickerBtnText}>{format(timeValue, 'h:mm a')}</Text>
+            </TouchableOpacity>
+            {showTimePicker && (
+              <DateTimePicker
+                value={timeValue}
+                mode="time"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(e: DateTimePickerEvent, d?: Date) => {
+                  setShowTimePicker(Platform.OS === 'ios');
+                  if (d) setTimeValue(d);
+                }}
+              />
+            )}
+          </>
+        )}
+      </FormField>
+
+      {!hasTime && (
+        <FormField label="Time of day">
+          <View style={styles.chipRow}>
+            {GROUPS.map(g => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.chip, group === g && styles.chipActive]}
+                onPress={() => setGroup(g)}
+              >
+                <Text style={[styles.chipLabel, group === g && styles.chipLabelActive]}>
+                  {g.charAt(0).toUpperCase() + g.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </FormField>
+      )}
+
+      <FormField label="Active days (empty = every day)">
+        <View style={styles.dayRow}>
+          {DAY_LABELS.map((label, idx) => (
+            <TouchableOpacity
+              key={idx}
+              style={[styles.dayChip, activeDays.includes(idx) && styles.dayChipActive]}
+              onPress={() => toggleDay(idx)}
+            >
+              <Text style={[styles.dayLabel, activeDays.includes(idx) && styles.dayLabelActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </FormField>
+
+      <FormField label="Can be pushed/deferred?">
+        <View style={styles.toggleRow}>
+          <Switch value={canDefer} onValueChange={setCanDefer} thumbColor={canDefer ? COLORS.PRIMARY : undefined} trackColor={{ true: COLORS.PRIMARY_LIGHT }} />
+          <Text style={styles.toggleLabel}>{canDefer ? 'Yes' : 'No'}</Text>
+        </View>
+      </FormField>
+
+      <FormField label="Notes (optional)">
+        <TextInput
+          style={[styles.input, styles.notesInput]}
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Any extra details..."
+          placeholderTextColor={COLORS.TEXT_MUTED}
+          multiline
+          numberOfLines={3}
+        />
+      </FormField>
+
+      <SaveButton onPress={handleSave} loading={saving} />
+    </>
+  );
+}
+
+// ─── Shared sub-components ────────────────────────────────────────────────────
+
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+function SaveButton({ onPress, loading }: { onPress: () => void; loading: boolean }) {
+  return (
+    <TouchableOpacity style={[styles.saveBtn, loading && { opacity: 0.6 }]} onPress={onPress} disabled={loading}>
+      <Ionicons name="checkmark-circle" size={24} color={COLORS.WHITE} />
+      <Text style={styles.saveBtnText}>{loading ? 'Saving…' : 'Save Task'}</Text>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: COLORS.BACKGROUND },
+  container: { padding: SPACING.MD, paddingBottom: SPACING.XL },
+  formTitle: { fontSize: FONT.TITLE_CARD, fontWeight: '800', color: COLORS.TEXT, marginBottom: SPACING.LG },
+  field: { marginBottom: SPACING.MD },
+  label: { fontSize: FONT.BODY_SM, fontWeight: '700', color: COLORS.TEXT, marginBottom: SPACING.XS },
+  input: {
+    backgroundColor: COLORS.WHITE,
+    borderWidth: 1.5,
+    borderColor: COLORS.BORDER,
+    borderRadius: RADIUS.CARD,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.SM,
+    fontSize: FONT.BODY,
+    color: COLORS.TEXT,
+    minHeight: 56,
+  },
+  notesInput: { minHeight: 90, textAlignVertical: 'top', paddingTop: SPACING.SM },
+  smallInput: { minHeight: 48, width: 60, textAlign: 'center' },
+  pickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.WHITE,
+    borderWidth: 1.5,
+    borderColor: COLORS.BORDER,
+    borderRadius: RADIUS.CARD,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.SM,
+    gap: SPACING.SM,
+    minHeight: 56,
+  },
+  pickerBtnText: { fontSize: FONT.BODY, color: COLORS.TEXT },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.SM },
+  toggleLabel: { fontSize: FONT.BODY, color: COLORS.TEXT_SECONDARY },
+  recurRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.SM, marginTop: SPACING.SM },
+  recurLabel: { fontSize: FONT.BODY, color: COLORS.TEXT },
+  unitPicker: { flexDirection: 'row', gap: SPACING.XS },
+  unitBtn: {
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: 8,
+    borderRadius: RADIUS.CHIP,
+    backgroundColor: COLORS.BORDER,
+  },
+  unitBtnActive: { backgroundColor: COLORS.PRIMARY },
+  unitLabel: { fontSize: FONT.CAPTION, fontWeight: '600', color: COLORS.TEXT_MUTED },
+  unitLabelActive: { color: COLORS.WHITE },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.XS },
+  chip: {
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: 10,
+    borderRadius: RADIUS.CHIP,
+    backgroundColor: COLORS.BORDER,
+    minWidth: 52,
+    alignItems: 'center',
+  },
+  chipActive: { backgroundColor: COLORS.PRIMARY },
+  chipLabel: { fontSize: FONT.BODY_SM, fontWeight: '600', color: COLORS.TEXT_MUTED },
+  chipLabelActive: { color: COLORS.WHITE },
+  dayRow: { flexDirection: 'row', gap: SPACING.XS },
+  dayChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.BORDER,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayChipActive: { backgroundColor: COLORS.PRIMARY },
+  dayLabel: { fontSize: FONT.CAPTION, fontWeight: '700', color: COLORS.TEXT_MUTED },
+  dayLabelActive: { color: COLORS.WHITE },
+  saveBtn: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.PRIMARY,
+    borderRadius: RADIUS.BUTTON,
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.SM,
+    marginTop: SPACING.LG,
+  },
+  saveBtnText: { fontSize: FONT.BUTTON, fontWeight: '700', color: COLORS.WHITE },
+});

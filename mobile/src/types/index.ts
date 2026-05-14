@@ -1,0 +1,73 @@
+export type TaskKind = 'external' | 'internal' | 'interday';
+export type RecurrenceUnit = 'days' | 'weeks' | 'months';
+export type InterdayGroup = 'morning' | 'afternoon' | 'evening' | 'none';
+
+export interface Recurrence {
+  every: number;
+  unit: RecurrenceUnit;
+}
+
+export interface ExternalTask {
+  id: string;
+  kind: 'external';
+  title: string;
+  notes?: string;
+  dateTime: string;           // ISO-8601 date+time
+  recurrence?: Recurrence;
+  earlyReminderDays: number;  // 0 = no early reminder
+  dayOfReminder: boolean;
+  notificationIds: string[];
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface InternalTask {
+  id: string;
+  kind: 'internal';
+  title: string;
+  notes?: string;
+  nextDueDate: string;        // ISO date (YYYY-MM-DD)
+  intervalDays: number;       // 0 = one-time
+  notificationIds: string[];
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface InterdayTask {
+  id: string;
+  kind: 'interday';
+  title: string;
+  notes?: string;
+  timeSlot?: string;          // "08:30" 24h format
+  group: InterdayGroup;
+  activeDays: number[];       // 0=Sun…6=Sat; [] = every day
+  canDefer: boolean;
+  deferredUntil?: string;     // ISO date
+  notificationIds: string[];
+  createdAt: string;
+  archivedAt?: string;
+}
+
+export type Task = ExternalTask | InternalTask | InterdayTask;
+
+export type MessageRole = 'user' | 'assistant';
+
+export interface ChatMessage {
+  id: string;
+  role: MessageRole;
+  content: string;
+  timestamp: string;
+}
+
+export type TabParamList = {
+  Today: undefined;
+  Tasks: undefined;
+  Chat: undefined;
+};
+
+export type RootStackParamList = {
+  Tabs: undefined;
+  AddTask: { kind: TaskKind };
+  EditTask: { taskId: string };
+  TaskDetail: { taskId: string };
+};
