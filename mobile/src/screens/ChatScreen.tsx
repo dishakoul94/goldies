@@ -146,6 +146,8 @@ export default function ChatScreen() {
           contentContainerStyle={styles.messageList}
           onLayout={scrollToBottom}
           showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
           ListFooterComponent={loading ? <TypingIndicator /> : null}
         />
 
