@@ -2,7 +2,7 @@ import { Task, ExternalTask } from './types';
 import { addDays, parseISO, isToday, isWithinInterval, format } from 'date-fns';
 
 export const BASE_URL = __DEV__
-  ? 'http://localhost:8000'
+  ? 'http://10.0.0.209:8000'
   : 'https://your-goldies-backend.up.railway.app';
 
 export async function sendChatMessage(
@@ -11,31 +11,41 @@ export async function sendChatMessage(
   userName: string | null,
   onToken: (token: string) => void,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, tasks_context: tasksContext, user_name: userName }),
-  });
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${BASE_URL}/api/chat`);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Accept', 'text/event-stream');
 
-  if (!res.ok || !res.body) {
-    throw new Error(`Server error: ${res.status}`);
-  }
+    let cursor = 0; // how many chars of responseText we've already processed
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
+    xhr.onprogress = () => {
+      const newChunk = xhr.responseText.slice(cursor);
+      cursor = xhr.responseText.length;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = decoder.decode(value, { stream: true });
-    for (const line of chunk.split('\n')) {
-      if (line.startsWith('data: ')) {
-        const token = line.slice(6);
-        if (token === '[DONE]') return;
-        onToken(token);
+      for (const line of newChunk.split('\n')) {
+        if (line.startsWith('data: ')) {
+          const token = line.slice(6);
+          if (token === '[DONE]') return;
+          if (token) onToken(token);
+        }
       }
-    }
-  }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(`Server error: ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.ontimeout = () => reject(new Error('Request timed out'));
+    xhr.timeout = 30000;
+
+    xhr.send(JSON.stringify({ messages, tasks_context: tasksContext, user_name: userName }));
+  });
 }
 
 export function buildTasksContext(tasks: Task[]): string {
