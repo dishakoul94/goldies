@@ -104,7 +104,7 @@ export default function ChatScreen() {
       setMessages(prev =>
         prev.map(m =>
           m.id === assistantMsg.id
-            ? { ...m, content: "I'm sorry, I couldn't connect right now. Please check your internet connection and try again." }
+            ? { ...m, content: "I'm sorry, I couldn't connect right now. Please make sure the backend is running and try again." }
             : m,
         ),
       );
@@ -119,8 +119,8 @@ export default function ChatScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
