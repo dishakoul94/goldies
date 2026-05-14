@@ -100,10 +100,19 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask): Pro
 
 export async function scheduleInternalTaskNotification(task: InternalTask): Promise<string[]> {
   if (Platform.OS === 'web') return [];
-  const dueDate = parseISO(task.nextDueDate);
+  // Use noon local time to avoid UTC midnight timezone shift
+  const dueDate = new Date(task.nextDueDate + 'T12:00:00');
   dueDate.setHours(9, 0, 0, 0);
   const now = new Date();
-  if (isBefore(dueDate, now)) return [];
+  // If 9AM has already passed today, fire 2 minutes from now instead
+  if (isBefore(dueDate, now)) {
+    const soonDate = new Date(now.getTime() + 2 * 60 * 1000);
+    const id = await Notifications.scheduleNotificationAsync({
+      content: { title: 'Reminder', body: task.title, sound: true },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: soonDate },
+    });
+    return [id];
+  }
 
   const id = await Notifications.scheduleNotificationAsync({
     content: {

@@ -1,20 +1,19 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, TouchableOpacity, Platform,
+  View, Text, FlatList, SectionList, StyleSheet, TouchableOpacity, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { RootStackParamList, Task, TaskKind, ExternalTask, InternalTask, InterdayTask } from '../types';
+import { RootStackParamList, Task, TaskKind, InternalTask, InterdayTask, InterdayGroup } from '../types';
 import { loadAllTasks, deleteTask, updateTask } from '../storage';
-import { cancelNotifications } from '../notifications';
+import { cancelNotifications, scheduleInternalTaskNotification, scheduleInterdayTaskNotifications } from '../notifications';
 import { showConfirm } from '../utils/alert';
 import { COLORS, FONT, SPACING, RADIUS } from '../utils/theme';
 import TaskCard from '../components/TaskCard';
-import { addDays, parseISO, format } from 'date-fns';
-import { scheduleInternalTaskNotification, scheduleInterdayTaskNotifications } from '../notifications';
+import { addDays, format } from 'date-fns';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Segment = 'external' | 'internal' | 'interday';
@@ -24,6 +23,14 @@ const SEGMENTS: { key: Segment; label: string }[] = [
   { key: 'internal', label: 'To-Do' },
   { key: 'interday', label: 'Daily' },
 ];
+
+const GROUP_ORDER: InterdayGroup[] = ['morning', 'afternoon', 'evening', 'none'];
+const GROUP_META: Record<InterdayGroup, { label: string; icon: string; time: string }> = {
+  morning:   { label: 'Morning',   icon: '🌅', time: '8:00 AM' },
+  afternoon: { label: 'Afternoon', icon: '☀️',  time: '2:00 PM' },
+  evening:   { label: 'Evening',   icon: '🌙', time: '7:00 PM' },
+  none:      { label: 'Anytime',   icon: '🔁', time: '9:00 AM' },
+};
 
 export default function TasksScreen() {
   const navigation = useNavigation<Nav>();
@@ -36,24 +43,33 @@ export default function TasksScreen() {
     }, []),
   );
 
-  const filtered = tasks.filter(t => {
+  const activeTasks = tasks.filter(t => {
     if (t.kind !== segment) return false;
     if (t.kind === 'external' || t.kind === 'internal') return !t.completedAt;
     if (t.kind === 'interday') return !t.archivedAt;
     return true;
   });
 
+  // Build sections for Daily tasks grouped by time-of-day
+  const dailySections = GROUP_ORDER.map(group => ({
+    group,
+    title: `${GROUP_META[group].icon}  ${GROUP_META[group].label}`,
+    defaultTime: GROUP_META[group].time,
+    data: activeTasks.filter(
+      (t): t is InterdayTask => t.kind === 'interday' && t.group === group,
+    ),
+  })).filter(s => s.data.length > 0);
+
   const handleComplete = useCallback(async (task: Task) => {
     await cancelNotifications(task.notificationIds);
     await updateTask({ ...task, completedAt: new Date().toISOString(), notificationIds: [] } as Task);
-    const all = await loadAllTasks();
-    setTasks(all);
+    setTasks(await loadAllTasks());
   }, []);
 
   const handleDefer = useCallback(async (task: Task) => {
     if (task.kind === 'internal') {
       await cancelNotifications(task.notificationIds);
-      const newDate = format(addDays(parseISO(task.nextDueDate), 1), 'yyyy-MM-dd');
+      const newDate = format(addDays(new Date(task.nextDueDate + 'T12:00:00'), 1), 'yyyy-MM-dd');
       const updated: InternalTask = { ...task, nextDueDate: newDate };
       const ids = await scheduleInternalTaskNotification(updated);
       await updateTask({ ...updated, notificationIds: ids });
@@ -64,8 +80,7 @@ export default function TasksScreen() {
       const ids = await scheduleInterdayTaskNotifications(updated);
       await updateTask({ ...updated, notificationIds: ids });
     }
-    const all = await loadAllTasks();
-    setTasks(all);
+    setTasks(await loadAllTasks());
   }, []);
 
   const handleLongPress = useCallback((task: Task) => {
@@ -76,8 +91,7 @@ export default function TasksScreen() {
       async () => {
         await cancelNotifications(task.notificationIds);
         await deleteTask(task.id);
-        const all = await loadAllTasks();
-        setTasks(all);
+        setTasks(await loadAllTasks());
       },
       'Delete',
     );
@@ -88,6 +102,25 @@ export default function TasksScreen() {
     internal: 'internal',
     interday: 'interday',
   };
+
+  const renderCard = (task: Task) => (
+    <TaskCard
+      key={task.id}
+      task={task}
+      onComplete={handleComplete}
+      onDefer={handleDefer}
+      onPress={t => navigation.navigate('TaskDetail', { taskId: t.id })}
+      onLongPress={handleLongPress}
+    />
+  );
+
+  const emptyComponent = (
+    <View style={styles.empty}>
+      <Ionicons name="checkmark-done-circle-outline" size={56} color={COLORS.BORDER} />
+      <Text style={styles.emptyText}>No tasks here yet.</Text>
+      <Text style={styles.emptyHint}>Tap + to add one!</Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -119,27 +152,37 @@ export default function TasksScreen() {
         ))}
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={t => t.id}
-        renderItem={({ item }) => (
-          <TaskCard
-            task={item}
-            onComplete={handleComplete}
-            onDefer={handleDefer}
-            onPress={t => navigation.navigate('TaskDetail', { taskId: t.id })}
-            onLongPress={handleLongPress}
+      {/* Daily tasks: SectionList grouped by time of day */}
+      {segment === 'interday' ? (
+        dailySections.length === 0 ? (
+          <View style={styles.list}>{emptyComponent}</View>
+        ) : (
+          <SectionList
+            sections={dailySections}
+            keyExtractor={t => t.id}
+            renderItem={({ item }) => renderCard(item)}
+            renderSectionHeader={({ section }) => (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>{section.title}</Text>
+                <Text style={styles.sectionHeaderTime}>
+                  Default reminder: {section.defaultTime}
+                </Text>
+              </View>
+            )}
+            contentContainerStyle={styles.list}
+            stickySectionHeadersEnabled={false}
           />
-        )}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="checkmark-done-circle-outline" size={56} color={COLORS.BORDER} />
-            <Text style={styles.emptyText}>No tasks here yet.</Text>
-            <Text style={styles.emptyHint}>Tap + to add one!</Text>
-          </View>
-        }
-      />
+        )
+      ) : (
+        /* Appointments and To-Do: flat list */
+        <FlatList
+          data={activeTasks}
+          keyExtractor={t => t.id}
+          renderItem={({ item }) => renderCard(item)}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={emptyComponent}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -181,6 +224,23 @@ const styles = StyleSheet.create({
   segLabel: { fontSize: FONT.CAPTION, fontWeight: '600', color: COLORS.TEXT_MUTED },
   segLabelActive: { color: COLORS.TEXT, fontWeight: '700' },
   list: { paddingHorizontal: SPACING.MD, paddingBottom: SPACING.XL },
+  sectionHeader: {
+    marginTop: SPACING.MD,
+    marginBottom: SPACING.SM,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  sectionHeaderText: {
+    fontSize: FONT.BODY,
+    fontWeight: '800',
+    color: COLORS.TEXT,
+  },
+  sectionHeaderTime: {
+    fontSize: FONT.CAPTION,
+    color: COLORS.TEXT_MUTED,
+    fontStyle: 'italic',
+  },
   empty: { alignItems: 'center', marginTop: SPACING.XL * 2, gap: SPACING.SM },
   emptyText: { fontSize: FONT.BODY, color: COLORS.TEXT_MUTED, fontWeight: '600' },
   emptyHint: { fontSize: FONT.BODY_SM, color: COLORS.TEXT_MUTED },
