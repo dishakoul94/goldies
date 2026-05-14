@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Task, ExternalTask, InternalTask, InterdayTask, ChatMessage } from './types';
-import { isToday, parseISO, isBefore, addDays, isWithinInterval } from 'date-fns';
+import { isToday, parseISO, addDays, isWithinInterval, format } from 'date-fns';
 
 const KEYS = {
   TASKS: 'goldies_tasks',
@@ -76,11 +76,13 @@ export function getTasksDueToday(tasks: Task[]): Task[] {
       return isToday(parseISO(task.dateTime));
     }
     if (task.kind === 'internal') {
-      const due = parseISO(task.nextDueDate);
-      return isToday(due) || isBefore(due, now);
+      // Compare date strings directly to avoid UTC midnight timezone shift
+      const todayStr = format(now, 'yyyy-MM-dd');
+      return task.nextDueDate <= todayStr;
     }
     if (task.kind === 'interday') {
-      if (task.deferredUntil && isBefore(now, parseISO(task.deferredUntil))) return false;
+      const todayStr = format(now, 'yyyy-MM-dd');
+      if (task.deferredUntil && task.deferredUntil > todayStr) return false;
       const todayDay = now.getDay(); // 0=Sun
       if (task.activeDays.length === 0) return true;
       return task.activeDays.includes(todayDay);
