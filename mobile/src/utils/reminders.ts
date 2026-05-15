@@ -55,7 +55,11 @@ export function getUpcomingReminders(tasks: Task[], windowDays = 14): UpcomingRe
         if (task.earlyReminderDays > 0) {
           const earlyDate = subDays(occ, task.earlyReminderDays);
           earlyDate.setHours(9, 0, 0, 0);
-          if (!isBefore(earlyDate, now) && isBefore(earlyDate, cutoff)) {
+          const startOfEarlyDay = new Date(earlyDate);
+          startOfEarlyDay.setHours(0, 0, 0, 0);
+          const startOfToday = new Date(now);
+          startOfToday.setHours(0, 0, 0, 0);
+          if (!isBefore(startOfEarlyDay, startOfToday) && isBefore(earlyDate, cutoff)) {
             reminders.push({
               key: `${task.id}_early_${occ.getTime()}`,
               taskId: task.id,
