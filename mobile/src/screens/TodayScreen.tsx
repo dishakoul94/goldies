@@ -19,6 +19,8 @@ import {
 import { COLORS, FONT, SPACING, RADIUS } from '../utils/theme';
 import { showConfirm } from '../utils/alert';
 import TaskCard from '../components/TaskCard';
+import ReminderCard from '../components/ReminderCard';
+import { getUpcomingReminders, UpcomingReminder } from '../utils/reminders';
 import { addDays, parseISO, format as dateFnsFormat } from 'date-fns';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -35,6 +37,7 @@ export default function TodayScreen() {
   const navigation = useNavigation<Nav>();
   const [dueTasks, setDueTasks] = useState<Task[]>([]);
   const [upcomingTasks, setUpcomingTasks] = useState<Task[]>([]);
+  const [reminders, setReminders] = useState<UpcomingReminder[]>([]);
   const [userName, setUserName] = useState<string | null>(null);
 
   useFocusEffect(
@@ -42,6 +45,7 @@ export default function TodayScreen() {
       loadAllTasks().then(tasks => {
         setDueTasks(getTasksDueToday(tasks));
         setUpcomingTasks(getUpcomingExternal(tasks, 7));
+        setReminders(getUpcomingReminders(tasks, 14));
       });
 
       // Load name from storage
@@ -56,6 +60,7 @@ export default function TodayScreen() {
     const all = await loadAllTasks();
     setDueTasks(getTasksDueToday(all));
     setUpcomingTasks(getUpcomingExternal(all, 7));
+    setReminders(getUpcomingReminders(all, 14));
   }, []);
 
   const handleDefer = useCallback(async (task: Task) => {
@@ -74,6 +79,7 @@ export default function TodayScreen() {
     }
     const all = await loadAllTasks();
     setDueTasks(getTasksDueToday(all));
+    setReminders(getUpcomingReminders(all, 14));
   }, []);
 
   const handleAddTask = (kind: TaskKind) => {
@@ -109,6 +115,20 @@ export default function TodayScreen() {
               onPress={t => navigation.navigate('TaskDetail', { taskId: t.id })}
             />
           ))
+        )}
+
+        {/* Upcoming Reminders */}
+        {reminders.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>Upcoming Reminders</Text>
+            {reminders.map(reminder => (
+              <ReminderCard
+                key={reminder.key}
+                reminder={reminder}
+                onPress={r => navigation.navigate('TaskDetail', { taskId: r.taskId })}
+              />
+            ))}
+          </>
         )}
 
         {/* Coming Up */}
