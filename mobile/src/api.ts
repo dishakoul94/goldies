@@ -21,13 +21,20 @@ export async function sendChatMessage(
     xhr.setRequestHeader('Accept', 'text/event-stream');
 
     let cursor = 0;
-    let currentEventType = 'message'; // tracks named SSE event type between onprogress calls
+    let currentEventType = 'message';
+    // Buffer incomplete lines — HTTP chunks can split mid-line, which would
+    // truncate "event: task_delete" to "event: task_del" and break event detection.
+    let lineBuffer = '';
 
     xhr.onprogress = () => {
-      const newChunk = xhr.responseText.slice(cursor);
+      lineBuffer += xhr.responseText.slice(cursor);
       cursor = xhr.responseText.length;
 
-      for (const line of newChunk.split('\n')) {
+      // Only process complete lines; hold the last (possibly partial) line in the buffer.
+      const lines = lineBuffer.split('\n');
+      lineBuffer = lines.pop() ?? '';
+
+      for (const line of lines) {
         if (line.startsWith('event: ')) {
           currentEventType = line.slice(7).trim();
         } else if (line.startsWith('data: ')) {
@@ -53,9 +60,6 @@ export async function sendChatMessage(
           } else {
             onToken(data);
           }
-          // Reset after data line, not on blank lines — blank lines arrive between
-          // event: and data: if onprogress fires mid-event-block and would
-          // incorrectly clear the event type before the payload is processed.
           currentEventType = 'message';
         }
       }

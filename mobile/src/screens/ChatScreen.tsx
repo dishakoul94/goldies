@@ -23,6 +23,20 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+// Finds the best-matching active task by title. Tries exact match first,
+// then falls back to substring containment in either direction.
+function findTaskByTitle(tasks: import('../types').Task[], query: string) {
+  const q = query.toLowerCase();
+  const active = tasks.filter(t =>
+    !('completedAt' in t && t.completedAt) && !('archivedAt' in t && t.archivedAt),
+  );
+  return (
+    active.find(t => t.title.toLowerCase() === q) ??
+    active.find(t => t.title.toLowerCase().includes(q)) ??
+    active.find(t => q.includes(t.title.toLowerCase()))
+  );
+}
+
 const WELCOME: ChatMessage = {
   id: 'welcome',
   role: 'assistant',
@@ -102,9 +116,7 @@ export default function ChatScreen() {
   const handleTaskDelete = useCallback(async (payload: TaskDeletePayload) => {
     try {
       const allTasks = await loadAllTasks();
-      const target = allTasks.find(
-        t => t.title.toLowerCase() === payload.input.title.toLowerCase(),
-      );
+      const target = findTaskByTitle(allTasks, payload.input.title);
       if (!target) {
         console.warn('[Goldie] Delete: no task found with title:', payload.input.title);
         return;
@@ -119,9 +131,7 @@ export default function ChatScreen() {
   const handleTaskEdit = useCallback(async (payload: TaskEditPayload) => {
     try {
       const allTasks = await loadAllTasks();
-      const target = allTasks.find(
-        t => t.title.toLowerCase() === payload.input.title.toLowerCase(),
-      );
+      const target = findTaskByTitle(allTasks, payload.input.title);
       if (!target) {
         console.warn('[Goldie] Edit: no task found with title:', payload.input.title);
         return;
