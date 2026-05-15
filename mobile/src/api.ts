@@ -38,12 +38,13 @@ export async function sendChatMessage(
               const payload: TaskCreatePayload = JSON.parse(data);
               onTaskCreate?.(payload);
             } catch { /* malformed JSON — ignore */ }
-            currentEventType = 'message';
           } else {
             onToken(data);
           }
-        } else if (line === '') {
-          currentEventType = 'message'; // blank line = end of SSE event block
+          // Reset after data line, not on blank lines — blank lines arrive between
+          // event: and data: if onprogress fires mid-event-block and would
+          // incorrectly clear the event type before the payload is processed.
+          currentEventType = 'message';
         }
       }
     };
