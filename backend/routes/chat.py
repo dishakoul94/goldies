@@ -93,6 +93,91 @@ TASK_TOOLS = [
             "required": ["title", "group"],
         },
     },
+    {
+        "name": "delete_task",
+        "description": (
+            "Delete (remove) an existing task or appointment. "
+            "Use when the user wants to cancel, remove, or delete something from their schedule. "
+            "Match the title exactly as it appears in their tasks list."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "The title of the task to delete, as shown in the user's schedule.",
+                },
+            },
+            "required": ["title"],
+        },
+    },
+    {
+        "name": "edit_external_task",
+        "description": (
+            "Edit an existing calendar appointment or external event. "
+            "Use when the user wants to reschedule, rename, or change details of an existing appointment. "
+            "Only provide fields that should change — omit fields that stay the same."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Current title of the task to edit, as shown in the schedule."},
+                "newTitle": {"type": "string", "description": "New title if the user is renaming it."},
+                "newDateTime": {
+                    "type": "string",
+                    "description": "New ISO-8601 datetime if rescheduling, e.g. '2025-06-10T10:00:00'.",
+                },
+                "newEarlyReminderDays": {"type": "integer"},
+                "newDayOfReminder": {"type": "boolean"},
+                "newNotes": {"type": "string"},
+            },
+            "required": ["title"],
+        },
+    },
+    {
+        "name": "edit_internal_task",
+        "description": (
+            "Edit an existing to-do or recurring reminder. "
+            "Use when the user wants to push the due date, rename it, or change its recurrence. "
+            "Only provide fields that should change."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Current title of the task to edit."},
+                "newTitle": {"type": "string"},
+                "newNextDueDate": {"type": "string", "description": "New due date in YYYY-MM-DD format."},
+                "newIntervalDays": {"type": "integer", "description": "New repeat interval. 0 = one-time, 7 = weekly."},
+                "newNotes": {"type": "string"},
+            },
+            "required": ["title"],
+        },
+    },
+    {
+        "name": "edit_interday_task",
+        "description": (
+            "Edit an existing daily routine task. "
+            "Use when the user wants to change the time, group, or active days of a daily habit. "
+            "Only provide fields that should change."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Current title of the task to edit."},
+                "newTitle": {"type": "string"},
+                "newGroup": {"type": "string", "enum": ["morning", "afternoon", "evening", "none"]},
+                "newCanDefer": {"type": "boolean"},
+                "newActiveDays": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 0, "maximum": 6},
+                    "description": "0=Sun…6=Sat. Empty = every day.",
+                },
+                "newTimeSlot": {"type": "string", "description": "24h time 'HH:MM'."},
+                "newNotes": {"type": "string"},
+            },
+            "required": ["title"],
+        },
+    },
 ]
 
 
@@ -143,7 +228,7 @@ async def chat(req: ChatRequest):
         try:
             tool_use_block = None
             tool_input_buffer = ""
-            task_created = None
+            task_action = None
 
             with client.messages.stream(
                 model="claude-haiku-4-5-20251001",
@@ -171,15 +256,29 @@ async def chat(req: ChatRequest):
                                 tool_input = json.loads(tool_input_buffer)
                             except json.JSONDecodeError:
                                 tool_input = {}
-                            task_created = {"tool": tool_use_block["name"], "input": tool_input}
-                            payload = json.dumps(task_created)
-                            yield f"event: task_create\ndata: {payload}\n\n"
+                            tool_name = tool_use_block["name"]
+                            task_action = {"tool": tool_name, "input": tool_input}
+                            payload = json.dumps(task_action)
+                            if tool_name == "delete_task":
+                                sse_event = "task_delete"
+                            elif tool_name.startswith("edit_"):
+                                sse_event = "task_edit"
+                            else:
+                                sse_event = "task_create"
+                            yield f"event: {sse_event}\ndata: {payload}\n\n"
                             tool_use_block = None
                             tool_input_buffer = ""
 
-            if task_created is not None:
-                title = task_created["input"].get("title", "your task")
-                yield f'data: Done! I\'ve added "{title}" to your schedule.\n\n'
+            if task_action is not None:
+                tool_name = task_action["tool"]
+                title = task_action["input"].get("title", "your task")
+                if tool_name == "delete_task":
+                    yield f'data: Done! I\'ve removed "{title}" from your schedule.\n\n'
+                elif tool_name.startswith("edit_"):
+                    display = task_action["input"].get("newTitle") or title
+                    yield f'data: Done! I\'ve updated "{display}" for you.\n\n'
+                else:
+                    yield f'data: Done! I\'ve added "{title}" to your schedule.\n\n'
 
             yield "data: [DONE]\n\n"
         except Exception:

@@ -1,4 +1,4 @@
-import { Task, ExternalTask, TaskCreatePayload } from './types';
+import { Task, ExternalTask, TaskCreatePayload, TaskDeletePayload, TaskEditPayload } from './types';
 import { addDays, parseISO, isToday, isWithinInterval, format } from 'date-fns';
 
 export const BASE_URL = __DEV__
@@ -11,6 +11,8 @@ export async function sendChatMessage(
   userName: string | null,
   onToken: (token: string) => void,
   onTaskCreate?: (payload: TaskCreatePayload) => void,
+  onTaskDelete?: (payload: TaskDeletePayload) => void,
+  onTaskEdit?: (payload: TaskEditPayload) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -37,6 +39,16 @@ export async function sendChatMessage(
             try {
               const payload: TaskCreatePayload = JSON.parse(data);
               onTaskCreate?.(payload);
+            } catch { /* malformed JSON — ignore */ }
+          } else if (currentEventType === 'task_delete') {
+            try {
+              const payload: TaskDeletePayload = JSON.parse(data);
+              onTaskDelete?.(payload);
+            } catch { /* malformed JSON — ignore */ }
+          } else if (currentEventType === 'task_edit') {
+            try {
+              const payload: TaskEditPayload = JSON.parse(data);
+              onTaskEdit?.(payload);
             } catch { /* malformed JSON — ignore */ }
           } else {
             onToken(data);
@@ -93,19 +105,31 @@ export function buildTasksContext(tasks: Task[]): string {
     });
   }
 
-  const cutoff = addDays(now, 7);
-  const upcoming = tasks
+  const upcomingExternal = tasks
     .filter((t): t is ExternalTask => t.kind === 'external' && !t.completedAt)
-    .filter(t => {
-      const dt = parseISO(t.dateTime);
-      return isWithinInterval(dt, { start: now, end: cutoff }) && !isToday(dt);
-    })
-    .sort((a, b) => a.dateTime.localeCompare(b.dateTime))
-    .slice(0, 5);
+    .filter(t => parseISO(t.dateTime) > now && !isToday(parseISO(t.dateTime)))
+    .sort((a, b) => a.dateTime.localeCompare(b.dateTime));
 
-  if (upcoming.length > 0) {
-    lines.push('Upcoming appointments (next 7 days):');
-    upcoming.forEach(t => lines.push(`- ${t.title} on ${format(parseISO(t.dateTime), 'EEEE, MMM d')}`));
+  if (upcomingExternal.length > 0) {
+    lines.push('Upcoming appointments:');
+    upcomingExternal.forEach(t =>
+      lines.push(`- ${t.title} on ${format(parseISO(t.dateTime), 'EEEE, MMM d')} at ${format(parseISO(t.dateTime), 'h:mm a')}`),
+    );
+  }
+
+  const activeReminders = tasks.filter(t => t.kind === 'internal' && !t.completedAt);
+  if (activeReminders.length > 0) {
+    lines.push('Active reminders/to-dos:');
+    activeReminders.forEach(t => {
+      const due = (t as any).nextDueDate ? ` (due ${(t as any).nextDueDate})` : '';
+      lines.push(`- ${t.title}${due}`);
+    });
+  }
+
+  const dailyRoutines = tasks.filter(t => t.kind === 'interday' && !(t as any).archivedAt);
+  if (dailyRoutines.length > 0) {
+    lines.push('Daily routines:');
+    dailyRoutines.forEach(t => lines.push(`- ${t.title}`));
   }
 
   return lines.join('\n') || 'No tasks scheduled right now.';

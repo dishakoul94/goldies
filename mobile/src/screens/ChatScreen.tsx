@@ -7,13 +7,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { ChatMessage, TaskCreatePayload, ExternalTask, InternalTask, InterdayTask } from '../types';
-import { loadChatHistory, saveChatHistory, loadAllTasks, loadUserName, addTask } from '../storage';
+import { ChatMessage, TaskCreatePayload, TaskDeletePayload, TaskEditPayload, ExternalTask, InternalTask, InterdayTask } from '../types';
+import { loadChatHistory, saveChatHistory, loadAllTasks, loadUserName, addTask, updateTask, deleteTask, getTaskById } from '../storage';
 import { sendChatMessage, buildTasksContext } from '../api';
 import {
   scheduleExternalTaskNotifications,
   scheduleInternalTaskNotification,
   scheduleInterdayTaskNotifications,
+  cancelNotifications,
 } from '../notifications';
 import { COLORS, FONT, SPACING, RADIUS } from '../utils/theme';
 import { showAlert } from '../utils/alert';
@@ -98,6 +99,80 @@ export default function ChatScreen() {
     }
   }, []);
 
+  const handleTaskDelete = useCallback(async (payload: TaskDeletePayload) => {
+    try {
+      const allTasks = await loadAllTasks();
+      const target = allTasks.find(
+        t => t.title.toLowerCase() === payload.input.title.toLowerCase(),
+      );
+      if (!target) {
+        console.warn('[Goldie] Delete: no task found with title:', payload.input.title);
+        return;
+      }
+      await cancelNotifications(target.notificationIds);
+      await deleteTask(target.id);
+    } catch (err) {
+      console.warn('[Goldie] Task deletion from chat failed:', err);
+    }
+  }, []);
+
+  const handleTaskEdit = useCallback(async (payload: TaskEditPayload) => {
+    try {
+      const allTasks = await loadAllTasks();
+      const target = allTasks.find(
+        t => t.title.toLowerCase() === payload.input.title.toLowerCase(),
+      );
+      if (!target) {
+        console.warn('[Goldie] Edit: no task found with title:', payload.input.title);
+        return;
+      }
+
+      await cancelNotifications(target.notificationIds);
+
+      if (payload.tool === 'edit_external_task' && target.kind === 'external') {
+        const updated: ExternalTask = {
+          ...target,
+          title: payload.input.newTitle ?? target.title,
+          notes: payload.input.newNotes ?? target.notes,
+          dateTime: payload.input.newDateTime ?? target.dateTime,
+          earlyReminderDays: payload.input.newEarlyReminderDays ?? target.earlyReminderDays,
+          dayOfReminder: payload.input.newDayOfReminder ?? target.dayOfReminder,
+          notificationIds: [],
+        };
+        const ids = await scheduleExternalTaskNotifications(updated);
+        await updateTask({ ...updated, notificationIds: ids });
+      } else if (payload.tool === 'edit_internal_task' && target.kind === 'internal') {
+        const updated: InternalTask = {
+          ...target,
+          title: payload.input.newTitle ?? target.title,
+          notes: payload.input.newNotes ?? target.notes,
+          nextDueDate: payload.input.newNextDueDate ?? target.nextDueDate,
+          intervalDays: payload.input.newIntervalDays ?? target.intervalDays,
+          notificationIds: [],
+        };
+        const ids = await scheduleInternalTaskNotification(updated);
+        await updateTask({ ...updated, notificationIds: ids });
+      } else if (payload.tool === 'edit_interday_task' && target.kind === 'interday') {
+        const updated: InterdayTask = {
+          ...target,
+          title: payload.input.newTitle ?? target.title,
+          notes: payload.input.newNotes ?? target.notes,
+          group: payload.input.newGroup ?? target.group,
+          canDefer: payload.input.newCanDefer ?? target.canDefer,
+          activeDays: payload.input.newActiveDays ?? target.activeDays,
+          timeSlot: payload.input.newTimeSlot ?? target.timeSlot,
+          notificationIds: [],
+        };
+        const ids = await scheduleInterdayTaskNotifications(updated);
+        await updateTask({ ...updated, notificationIds: ids });
+      } else {
+        console.warn('[Goldie] Edit: task kind mismatch for', payload.tool, 'on', target.kind);
+      }
+    } catch (err) {
+      console.warn('[Goldie] Task edit from chat failed:', err);
+    }
+  }, []);
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
@@ -147,6 +222,8 @@ export default function ChatScreen() {
           scrollToBottom();
         },
         handleTaskCreate,
+        handleTaskDelete,
+        handleTaskEdit,
       );
 
       // Save complete history

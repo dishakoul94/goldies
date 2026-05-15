@@ -98,6 +98,35 @@ export interface TaskCreatePayload {
   };
 }
 
+export interface TaskDeletePayload {
+  tool: 'delete_task';
+  input: {
+    title: string;
+  };
+}
+
+export interface TaskEditPayload {
+  tool: 'edit_external_task' | 'edit_internal_task' | 'edit_interday_task';
+  input: {
+    title: string;
+    // shared
+    newTitle?: string;
+    newNotes?: string;
+    // ExternalTask
+    newDateTime?: string;
+    newEarlyReminderDays?: number;
+    newDayOfReminder?: boolean;
+    // InternalTask
+    newNextDueDate?: string;
+    newIntervalDays?: number;
+    // InterdayTask
+    newGroup?: InterdayGroup;
+    newCanDefer?: boolean;
+    newActiveDays?: number[];
+    newTimeSlot?: string;
+  };
+}
+
 export type TabParamList = {
   Today: undefined;
   Tasks: undefined;
