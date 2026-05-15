@@ -8,8 +8,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { format, parseISO, addDays } from 'date-fns';
-import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask } from '../types';
-import { getTaskById, updateTask, deleteTask, loadAllTasks } from '../storage';
+import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, ServiceProvider } from '../types';
+import { getTaskById, updateTask, deleteTask, loadAllTasks, getServiceProviderById } from '../storage';
 import {
   cancelNotifications, scheduleInternalTaskNotification,
   scheduleInterdayTaskNotifications,
@@ -35,12 +35,19 @@ export default function TaskDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteParams>();
   const [task, setTask] = useState<Task | null>(null);
+  const [provider, setProvider] = useState<ServiceProvider | null>(null);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
-      getTaskById(route.params.taskId).then(t => {
+      getTaskById(route.params.taskId).then(async t => {
         setTask(t);
+        if (t?.kind === 'external' && t.serviceProviderId) {
+          const p = await getServiceProviderById(t.serviceProviderId);
+          setProvider(p);
+        } else {
+          setProvider(null);
+        }
         setLoading(false);
       });
     }, [route.params.taskId]),
@@ -113,7 +120,7 @@ export default function TaskDetailScreen() {
 
         {/* Meta */}
         <View style={styles.metaCard}>
-          {task.kind === 'external' && <ExternalMeta task={task} />}
+          {task.kind === 'external' && <ExternalMeta task={task} provider={provider} />}
           {task.kind === 'internal' && <InternalMeta task={task} />}
           {task.kind === 'interday' && <InterdayMeta task={task} />}
           {task.notes ? (
@@ -154,7 +161,7 @@ export default function TaskDetailScreen() {
   );
 }
 
-function ExternalMeta({ task }: { task: ExternalTask }) {
+function ExternalMeta({ task, provider }: { task: ExternalTask; provider: ServiceProvider | null }) {
   return (
     <>
       <MetaRow icon="calendar" label="Date & Time" value={format(parseISO(task.dateTime), 'EEEE, MMMM d, yyyy · h:mm a')} />
@@ -163,6 +170,13 @@ function ExternalMeta({ task }: { task: ExternalTask }) {
       )}
       <MetaRow icon="notifications" label="Early reminder" value={task.earlyReminderDays === 0 ? 'None' : `${task.earlyReminderDays} day(s) before`} />
       <MetaRow icon="alarm" label="Day-of reminder" value={task.dayOfReminder ? 'On' : 'Off'} />
+      {provider && (
+        <MetaRow
+          icon="person-circle-outline"
+          label="Service Provider"
+          value={[provider.name, provider.specialty].filter(Boolean).join(' · ')}
+        />
+      )}
     </>
   );
 }

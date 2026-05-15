@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity,
   Switch, Platform, KeyboardAvoidingView,
@@ -8,9 +8,10 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import DateTimePickerCompat from '../components/DateTimePickerCompat';
+import ServiceProviderPicker, { ProviderSelection } from '../components/ServiceProviderPicker';
 import { format } from 'date-fns';
-import { RootStackParamList, TaskKind, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit } from '../types';
-import { addTask } from '../storage';
+import { RootStackParamList, TaskKind, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider } from '../types';
+import { addTask, addServiceProvider, getServiceProviderById } from '../storage';
 import {
   scheduleExternalTaskNotifications,
   scheduleInternalTaskNotification,
@@ -55,6 +56,13 @@ export default function AddTaskScreen() {
 
 // ─── External Form ────────────────────────────────────────────────────────────
 
+function buildAutoTitle(name: string, specialty?: string): string {
+  const role = specialty?.trim();
+  return role
+    ? `Meeting with ${name} for ${role} appointment`
+    : `Meeting with ${name}`;
+}
+
 function ExternalForm({ navigation }: { navigation: any }) {
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
@@ -66,7 +74,19 @@ function ExternalForm({ navigation }: { navigation: any }) {
   const [recurUnit, setRecurUnit] = useState<RecurrenceUnit>('weeks');
   const [earlyReminderDays, setEarlyReminderDays] = useState(0);
   const [dayOfReminder, setDayOfReminder] = useState(true);
+  const [providerSelection, setProviderSelection] = useState<ProviderSelection>({ type: 'none' });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (providerSelection.type === 'existing') {
+      getServiceProviderById(providerSelection.providerId).then(p => {
+        if (p) setTitle(buildAutoTitle(p.name, p.specialty));
+      });
+    } else if (providerSelection.type === 'new') {
+      const name = providerSelection.draft.name.trim();
+      if (name) setTitle(buildAutoTitle(name, providerSelection.draft.specialty));
+    }
+  }, [providerSelection]);
 
   const handleSave = async () => {
     if (!title.trim()) { showAlert('Please enter a title'); return; }
@@ -75,6 +95,21 @@ function ExternalForm({ navigation }: { navigation: any }) {
       const recurrence: Recurrence | undefined = isRecurring
         ? { every: parseInt(recurEvery) || 1, unit: recurUnit }
         : undefined;
+
+      let serviceProviderId: string | undefined;
+      if (providerSelection.type === 'existing') {
+        serviceProviderId = providerSelection.providerId;
+      } else if (providerSelection.type === 'new' && providerSelection.draft.name.trim()) {
+        const newProvider: ServiceProvider = {
+          id: makeId(),
+          name: providerSelection.draft.name.trim(),
+          specialty: providerSelection.draft.specialty.trim() || undefined,
+          phone: providerSelection.draft.phone.trim() || undefined,
+          createdAt: new Date().toISOString(),
+        };
+        await addServiceProvider(newProvider);
+        serviceProviderId = newProvider.id;
+      }
 
       const task: ExternalTask = {
         id: makeId(),
@@ -85,6 +120,7 @@ function ExternalForm({ navigation }: { navigation: any }) {
         recurrence,
         earlyReminderDays,
         dayOfReminder,
+        serviceProviderId,
         notificationIds: [],
         createdAt: new Date().toISOString(),
       };
@@ -100,14 +136,20 @@ function ExternalForm({ navigation }: { navigation: any }) {
     }
   };
 
+  const hasProvider = providerSelection.type !== 'none';
+
   return (
     <>
-      <FormField label="Title">
+      <FormField label="Service Provider">
+        <ServiceProviderPicker value={providerSelection} onChange={setProviderSelection} />
+      </FormField>
+
+      <FormField label={hasProvider ? 'Title' : 'Title *'}>
         <TextInput
           style={styles.input}
           value={title}
           onChangeText={setTitle}
-          placeholder="e.g. Doctor appointment"
+          placeholder={hasProvider ? 'Edit title if needed' : 'e.g. Doctor appointment (required)'}
           placeholderTextColor={COLORS.TEXT_MUTED}
           returnKeyType="done"
         />

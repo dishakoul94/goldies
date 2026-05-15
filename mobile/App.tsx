@@ -12,9 +12,11 @@ import { COLORS } from './src/utils/theme';
 import TodayScreen from './src/screens/TodayScreen';
 import TasksScreen from './src/screens/TasksScreen';
 import ChatScreen from './src/screens/ChatScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 import AddTaskScreen from './src/screens/AddTaskScreen';
 import EditTaskScreen from './src/screens/EditTaskScreen';
 import TaskDetailScreen from './src/screens/TaskDetailScreen';
+import ServiceProviderFormScreen from './src/screens/ServiceProviderFormScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -42,6 +44,7 @@ function TabNavigator() {
             Today: route.name === 'Today' ? 'today' : 'today-outline',
             Tasks: route.name === 'Tasks' ? 'list' : 'list-outline',
             Chat: route.name === 'Chat' ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline',
+            Profile: route.name === 'Profile' ? 'person-circle' : 'person-circle-outline',
           };
           return <Ionicons name={icons[route.name]} size={size} color={color} />;
         },
@@ -50,6 +53,7 @@ function TabNavigator() {
       <Tab.Screen name="Today" component={TodayScreen} options={{ tabBarLabel: 'Today' }} />
       <Tab.Screen name="Tasks" component={TasksScreen} options={{ tabBarLabel: 'Tasks' }} />
       <Tab.Screen name="Chat" component={ChatScreen} options={{ tabBarLabel: 'Goldie' }} />
+      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'Profile' }} />
     </Tab.Navigator>
   );
 }
@@ -109,6 +113,14 @@ export default function App() {
             name="TaskDetail"
             component={TaskDetailScreen}
             options={{ title: 'Task Details' }}
+          />
+          <Stack.Screen
+            name="ServiceProviderForm"
+            component={ServiceProviderFormScreen}
+            options={({ route }) => ({
+              title: route.params?.providerId ? 'Edit Provider' : 'New Provider',
+              presentation: 'modal',
+            })}
           />
         </Stack.Navigator>
       </NavigationContainer>

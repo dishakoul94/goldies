@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Task, ExternalTask, InternalTask, InterdayTask, ChatMessage } from './types';
+import { Task, ExternalTask, InternalTask, InterdayTask, ChatMessage, UserProfile, ServiceProvider } from './types';
 import { isToday, parseISO, addDays, isWithinInterval, format } from 'date-fns';
 
 const KEYS = {
   TASKS: 'goldies_tasks',
   CHAT_HISTORY: 'goldies_chat',
   USER_NAME: 'goldies_user_name',
+  USER_PROFILE: 'goldies_profile',
+  SERVICE_PROVIDERS: 'goldies_providers',
 } as const;
 
 // ─── Task CRUD ──────────────────────────────────────────────────────────────
@@ -57,11 +59,56 @@ export async function clearChatHistory(): Promise<void> {
 // ─── User prefs ─────────────────────────────────────────────────────────────
 
 export async function loadUserName(): Promise<string | null> {
+  const profile = await loadUserProfile();
+  if (profile?.firstName) return profile.firstName;
   return AsyncStorage.getItem(KEYS.USER_NAME);
 }
 
 export async function saveUserName(name: string): Promise<void> {
   await AsyncStorage.setItem(KEYS.USER_NAME, name);
+}
+
+// ─── User profile ────────────────────────────────────────────────────────────
+
+export async function loadUserProfile(): Promise<UserProfile | null> {
+  const raw = await AsyncStorage.getItem(KEYS.USER_PROFILE);
+  return raw ? JSON.parse(raw) : null;
+}
+
+export async function saveUserProfile(profile: UserProfile): Promise<void> {
+  await AsyncStorage.setItem(KEYS.USER_PROFILE, JSON.stringify(profile));
+  await AsyncStorage.setItem(KEYS.USER_NAME, profile.firstName);
+}
+
+// ─── Service providers ───────────────────────────────────────────────────────
+
+export async function loadServiceProviders(): Promise<ServiceProvider[]> {
+  const raw = await AsyncStorage.getItem(KEYS.SERVICE_PROVIDERS);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export async function saveAllServiceProviders(providers: ServiceProvider[]): Promise<void> {
+  await AsyncStorage.setItem(KEYS.SERVICE_PROVIDERS, JSON.stringify(providers));
+}
+
+export async function addServiceProvider(provider: ServiceProvider): Promise<void> {
+  const providers = await loadServiceProviders();
+  await saveAllServiceProviders([...providers, provider]);
+}
+
+export async function updateServiceProvider(updated: ServiceProvider): Promise<void> {
+  const providers = await loadServiceProviders();
+  await saveAllServiceProviders(providers.map(p => (p.id === updated.id ? updated : p)));
+}
+
+export async function deleteServiceProvider(providerId: string): Promise<void> {
+  const providers = await loadServiceProviders();
+  await saveAllServiceProviders(providers.filter(p => p.id !== providerId));
+}
+
+export async function getServiceProviderById(id: string): Promise<ServiceProvider | null> {
+  const providers = await loadServiceProviders();
+  return providers.find(p => p.id === id) ?? null;
 }
 
 // ─── Pure query helpers (synchronous, operate on already-loaded tasks) ──────
