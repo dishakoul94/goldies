@@ -78,6 +78,26 @@ export interface ChatMessage {
   timestamp: string;
 }
 
+export interface TaskCreatePayload {
+  tool: 'create_external_task' | 'create_internal_task' | 'create_interday_task';
+  input: {
+    title?: string;
+    notes?: string;
+    // ExternalTask
+    dateTime?: string;
+    earlyReminderDays?: number;
+    dayOfReminder?: boolean;
+    // InternalTask
+    nextDueDate?: string;
+    intervalDays?: number;
+    // InterdayTask
+    group?: InterdayGroup;
+    canDefer?: boolean;
+    activeDays?: number[];
+    timeSlot?: string;
+  };
+}
+
 export type TabParamList = {
   Today: undefined;
   Tasks: undefined;

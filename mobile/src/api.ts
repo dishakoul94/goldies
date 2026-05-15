@@ -1,4 +1,4 @@
-import { Task, ExternalTask } from './types';
+import { Task, ExternalTask, TaskCreatePayload } from './types';
 import { addDays, parseISO, isToday, isWithinInterval, format } from 'date-fns';
 
 export const BASE_URL = __DEV__
@@ -10,6 +10,7 @@ export async function sendChatMessage(
   tasksContext: string,
   userName: string | null,
   onToken: (token: string) => void,
+  onTaskCreate?: (payload: TaskCreatePayload) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -17,17 +18,32 @@ export async function sendChatMessage(
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.setRequestHeader('Accept', 'text/event-stream');
 
-    let cursor = 0; // how many chars of responseText we've already processed
+    let cursor = 0;
+    let currentEventType = 'message'; // tracks named SSE event type between onprogress calls
 
     xhr.onprogress = () => {
       const newChunk = xhr.responseText.slice(cursor);
       cursor = xhr.responseText.length;
 
       for (const line of newChunk.split('\n')) {
-        if (line.startsWith('data: ')) {
-          const token = line.slice(6);
-          if (token === '[DONE]') return;
-          if (token) onToken(token);
+        if (line.startsWith('event: ')) {
+          currentEventType = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') return;
+          if (!data) continue;
+
+          if (currentEventType === 'task_create') {
+            try {
+              const payload: TaskCreatePayload = JSON.parse(data);
+              onTaskCreate?.(payload);
+            } catch { /* malformed JSON — ignore */ }
+            currentEventType = 'message';
+          } else {
+            onToken(data);
+          }
+        } else if (line === '') {
+          currentEventType = 'message'; // blank line = end of SSE event block
         }
       }
     };
