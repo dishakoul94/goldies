@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Platform, View, StyleSheet } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 import { RootStackParamList, TabParamList } from './src/types';
 import { setupNotifications } from './src/notifications';
 import { COLORS } from './src/utils/theme';
@@ -53,14 +54,37 @@ function TabNavigator() {
   );
 }
 
+function navigateToTask(
+  navRef: NavigationContainerRef<RootStackParamList> | null,
+  taskId: string,
+) {
+  navRef?.navigate('TaskDetail', { taskId });
+}
+
 export default function App() {
+  const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
+
   useEffect(() => {
     setupNotifications();
+
+    // Case 1: app was fully closed and launched by tapping a notification
+    Notifications.getLastNotificationResponseAsync().then(response => {
+      const taskId = response?.notification.request.content.data?.taskId as string | undefined;
+      if (taskId) navigateToTask(navRef.current, taskId);
+    });
+
+    // Case 2: app is open (foreground or background) and user taps a notification
+    const sub = Notifications.addNotificationResponseReceivedListener(response => {
+      const taskId = response.notification.request.content.data?.taskId as string | undefined;
+      if (taskId) navigateToTask(navRef.current, taskId);
+    });
+
+    return () => sub.remove();
   }, []);
 
   return (
     <View style={styles.appContainer}>
-      <NavigationContainer>
+      <NavigationContainer ref={navRef}>
         <StatusBar style="dark" />
         <Stack.Navigator
           screenOptions={{

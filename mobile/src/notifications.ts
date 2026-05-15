@@ -69,6 +69,7 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask): Pro
             title: 'Upcoming Appointment',
             body: `"${task.title}" is in ${task.earlyReminderDays} day${task.earlyReminderDays > 1 ? 's' : ''}.`,
             sound: true,
+            data: { taskId: task.id },
           },
           trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: earlyDate },
         });
@@ -86,6 +87,7 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask): Pro
             title: `Today: ${task.title}`,
             body: `Your appointment is today at ${timeStr}.`,
             sound: true,
+            data: { taskId: task.id },
           },
           trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: dayOf },
         });
@@ -100,7 +102,6 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask): Pro
 
 export async function scheduleInternalTaskNotification(task: InternalTask): Promise<string[]> {
   if (Platform.OS === 'web') return [];
-  // Use noon local time to avoid UTC midnight timezone shift
   const dueDate = new Date(task.nextDueDate + 'T12:00:00');
   dueDate.setHours(9, 0, 0, 0);
   const now = new Date();
@@ -108,7 +109,7 @@ export async function scheduleInternalTaskNotification(task: InternalTask): Prom
   if (isBefore(dueDate, now)) {
     const soonDate = new Date(now.getTime() + 2 * 60 * 1000);
     const id = await Notifications.scheduleNotificationAsync({
-      content: { title: 'Reminder', body: task.title, sound: true },
+      content: { title: 'Reminder', body: task.title, sound: true, data: { taskId: task.id } },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: soonDate },
     });
     return [id];
@@ -119,6 +120,7 @@ export async function scheduleInternalTaskNotification(task: InternalTask): Prom
       title: 'Reminder',
       body: task.title,
       sound: true,
+      data: { taskId: task.id },
     },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: dueDate },
   });
@@ -142,7 +144,6 @@ export async function scheduleInterdayTaskNotifications(task: InterdayTask): Pro
     ? task.timeSlot.split(':').map(Number)
     : [GROUP_HOURS[task.group], 0];
 
-  // activeDays: [] means every day (0-6)
   const days = task.activeDays.length > 0 ? task.activeDays : [0, 1, 2, 3, 4, 5, 6];
 
   for (const day of days) {
@@ -151,10 +152,11 @@ export async function scheduleInterdayTaskNotifications(task: InterdayTask): Pro
         title: task.title,
         body: task.notes ?? `Time for: ${task.title}`,
         sound: true,
+        data: { taskId: task.id },
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-        weekday: day + 1, // expo: 1=Sun…7=Sat
+        weekday: day + 1,
         hour,
         minute,
       },
