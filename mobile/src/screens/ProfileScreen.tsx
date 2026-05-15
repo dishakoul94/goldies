@@ -30,7 +30,6 @@ export default function ProfileScreen() {
   const [mockTime, setMockTime] = useState<Date | null>(getMockTime);
   const [showMockPicker, setShowMockPicker] = useState(false);
   const [mockDateText, setMockDateText] = useState('');
-  const [mockTimeText, setMockTimeText] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -91,14 +90,14 @@ export default function ProfileScreen() {
   const openMockPicker = () => {
     const base = mockTime ?? new Date();
     setMockDateText(format(base, 'yyyy-MM-dd'));
-    setMockTimeText(format(base, 'HH:mm'));
     setShowMockPicker(true);
   };
 
   const confirmMockTime = async () => {
-    const parsed = new Date(`${mockDateText}T${mockTimeText}:00`);
+    const now = new Date();
+    const parsed = new Date(`${mockDateText}T${format(now, 'HH:mm')}:00`);
     if (isNaN(parsed.getTime())) {
-      showAlert('Invalid format. Use YYYY-MM-DD and HH:MM.');
+      showAlert('Invalid date format. Use YYYY-MM-DD.');
       return;
     }
     await saveMockTime(parsed);
@@ -107,11 +106,12 @@ export default function ProfileScreen() {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  // Web only: datetime-local input changed → save immediately
+  // Web only: date input changed → combine with current system time and save
   const handleMockWebChange = async (e: any) => {
     const val: string = e.target.value;
     if (!val) return;
-    const date = new Date(val);
+    const now = new Date();
+    const date = new Date(`${val}T${format(now, 'HH:mm')}:00`);
     await saveMockTime(date);
     setMockTime(date);
   };
@@ -123,10 +123,7 @@ export default function ProfileScreen() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const toDatetimeLocalValue = (d: Date): string => {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  };
+  const toDateInputValue = (d: Date): string => format(d, 'yyyy-MM-dd');
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -285,7 +282,7 @@ export default function ProfileScreen() {
             {Platform.OS !== 'web' && (
               <TouchableOpacity style={styles.mockPickerBtn} onPress={openMockPicker}>
                 <Ionicons name="calendar-outline" size={16} color={COLORS.PRIMARY} />
-                <Text style={styles.mockPickerBtnText}>Set Date & Time</Text>
+                <Text style={styles.mockPickerBtnText}>Set Date</Text>
               </TouchableOpacity>
             )}
             {mockTime && (
@@ -298,8 +295,8 @@ export default function ProfileScreen() {
           {Platform.OS === 'web' && (
             // @ts-ignore
             <input
-              type="datetime-local"
-              value={toDatetimeLocalValue(mockTime ?? new Date())}
+              type="date"
+              value={toDateInputValue(mockTime ?? new Date())}
               onChange={handleMockWebChange}
               style={{
                 fontSize: 15,
@@ -326,7 +323,7 @@ export default function ProfileScreen() {
             >
               <KeyboardAvoidingView style={styles.mockModalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                 <View style={styles.mockModalCard}>
-                  <Text style={styles.mockModalTitle}>Set System Date & Time</Text>
+                  <Text style={styles.mockModalTitle}>Set System Date</Text>
 
                   <Text style={styles.fieldLabel}>Date</Text>
                   <TextInput
@@ -334,18 +331,6 @@ export default function ProfileScreen() {
                     value={mockDateText}
                     onChangeText={setMockDateText}
                     placeholder="YYYY-MM-DD"
-                    placeholderTextColor={COLORS.TEXT_MUTED}
-                    keyboardType="numbers-and-punctuation"
-                    autoCorrect={false}
-                    returnKeyType="next"
-                  />
-
-                  <Text style={[styles.fieldLabel, { marginTop: SPACING.SM }]}>Time (24h)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={mockTimeText}
-                    onChangeText={setMockTimeText}
-                    placeholder="HH:MM"
                     placeholderTextColor={COLORS.TEXT_MUTED}
                     keyboardType="numbers-and-punctuation"
                     autoCorrect={false}
@@ -359,7 +344,7 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.saveProfileBtn} onPress={confirmMockTime}>
                       <Ionicons name="checkmark" size={18} color={COLORS.WHITE} />
-                      <Text style={styles.saveProfileBtnText}>Set Time</Text>
+                      <Text style={styles.saveProfileBtnText}>Set Date</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

@@ -15,9 +15,7 @@ interface Props {
 
 export default function DateTimePickerCompat({ value, mode, onChange, onClose, minimumDate, display }: Props) {
   const resolvedDisplay: DisplayMode = display ?? (
-    mode === 'date'
-      ? (Platform.OS === 'ios' ? 'compact' : 'default')
-      : (Platform.OS === 'ios' ? 'spinner' : 'default')
+    Platform.OS === 'ios' ? 'compact' : 'default'
   );
   return (
     <DateTimePicker

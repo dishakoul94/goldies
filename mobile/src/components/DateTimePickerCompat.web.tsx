@@ -29,12 +29,17 @@ export default function DateTimePickerCompat({ value, mode, onChange, onClose, m
     if (mode === 'date') {
       const [year, month, day] = val.split('-').map(Number);
       next.setFullYear(year, month - 1, day);
+      onChange(next);
+      onClose?.();
     } else {
       const [hours, minutes] = val.split(':').map(Number);
       next.setHours(hours, minutes);
+      onChange(next);
     }
-    onChange(next);
-    onClose?.();
+  };
+
+  const handleBlur = () => {
+    if (mode === 'time') onClose?.();
   };
 
   const minAttr = minimumDate ? toInputValue(minimumDate, 'date') : undefined;
@@ -47,6 +52,7 @@ export default function DateTimePickerCompat({ value, mode, onChange, onClose, m
         value={toInputValue(value, mode)}
         min={minAttr}
         onChange={handleChange}
+        onBlur={handleBlur}
         style={{
           fontSize: 16,
           padding: '10px 14px',
