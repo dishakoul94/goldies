@@ -6,8 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
+import DateTimePickerCompat from '../components/DateTimePickerCompat';
 import { format, parseISO } from 'date-fns';
 import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit } from '../types';
 import { getTaskById, updateTask } from '../storage';
@@ -120,8 +120,9 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
           <Text style={styles.pickerBtnText}>{format(dateTime, 'EEEE, MMMM d, yyyy')}</Text>
         </TouchableOpacity>
         {showDatePicker && (
-          <DateTimePicker value={dateTime} mode="date" display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            onChange={(e: DateTimePickerEvent, d?: Date) => { setShowDatePicker(Platform.OS === 'ios'); if (d) setDateTime(prev => { const n = new Date(prev); n.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); return n; }); }} />
+          <DateTimePickerCompat value={dateTime} mode="date"
+            onChange={(d) => setDateTime(prev => { const n = new Date(prev); n.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); return n; })}
+            onClose={() => setShowDatePicker(false)} />
         )}
       </FormField>
       <FormField label="Time">
@@ -130,8 +131,9 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
           <Text style={styles.pickerBtnText}>{format(dateTime, 'h:mm a')}</Text>
         </TouchableOpacity>
         {showTimePicker && (
-          <DateTimePicker value={dateTime} mode="time" display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(e: DateTimePickerEvent, d?: Date) => { setShowTimePicker(Platform.OS === 'ios'); if (d) setDateTime(prev => { const n = new Date(prev); n.setHours(d.getHours(), d.getMinutes()); return n; }); }} />
+          <DateTimePickerCompat value={dateTime} mode="time"
+            onChange={(d) => setDateTime(prev => { const n = new Date(prev); n.setHours(d.getHours(), d.getMinutes()); return n; })}
+            onClose={() => setShowTimePicker(false)} />
         )}
       </FormField>
       <FormField label="Recurring?">
@@ -213,8 +215,9 @@ function InternalEditForm({ task, navigation }: { task: InternalTask; navigation
           <Text style={styles.pickerBtnText}>{format(dueDate, 'EEEE, MMMM d, yyyy')}</Text>
         </TouchableOpacity>
         {showDatePicker && (
-          <DateTimePicker value={dueDate} mode="date" display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            onChange={(e: DateTimePickerEvent, d?: Date) => { setShowDatePicker(Platform.OS === 'ios'); if (d) setDueDate(d); }} />
+          <DateTimePickerCompat value={dueDate} mode="date"
+            onChange={(d) => setDueDate(d)}
+            onClose={() => setShowDatePicker(false)} />
         )}
       </FormField>
       <FormField label="Remind me every">
@@ -284,8 +287,9 @@ function InterdayEditForm({ task, navigation }: { task: InterdayTask; navigation
               <Text style={styles.pickerBtnText}>{format(timeValue, 'h:mm a')}</Text>
             </TouchableOpacity>
             {showTimePicker && (
-              <DateTimePicker value={timeValue} mode="time" display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(e: DateTimePickerEvent, d?: Date) => { setShowTimePicker(Platform.OS === 'ios'); if (d) setTimeValue(d); }} />
+              <DateTimePickerCompat value={timeValue} mode="time"
+                onChange={(d) => setTimeValue(d)}
+                onClose={() => setShowTimePicker(false)} />
             )}
           </>
         )}

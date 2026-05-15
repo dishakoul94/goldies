@@ -6,8 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
+import DateTimePickerCompat from '../components/DateTimePickerCompat';
 import { format } from 'date-fns';
 import { RootStackParamList, TaskKind, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit } from '../types';
 import { addTask } from '../storage';
@@ -119,15 +119,12 @@ function ExternalForm({ navigation }: { navigation: any }) {
           <Text style={styles.pickerBtnText}>{format(dateTime, 'EEEE, MMMM d, yyyy')}</Text>
         </TouchableOpacity>
         {showDatePicker && (
-          <DateTimePicker
+          <DateTimePickerCompat
             value={dateTime}
             mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
             minimumDate={new Date()}
-            onChange={(e: DateTimePickerEvent, d?: Date) => {
-              setShowDatePicker(Platform.OS === 'ios');
-              if (d) setDateTime(prev => { const next = new Date(prev); next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); return next; });
-            }}
+            onChange={(d) => setDateTime(prev => { const next = new Date(prev); next.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); return next; })}
+            onClose={() => setShowDatePicker(false)}
           />
         )}
       </FormField>
@@ -138,14 +135,11 @@ function ExternalForm({ navigation }: { navigation: any }) {
           <Text style={styles.pickerBtnText}>{format(dateTime, 'h:mm a')}</Text>
         </TouchableOpacity>
         {showTimePicker && (
-          <DateTimePicker
+          <DateTimePickerCompat
             value={dateTime}
             mode="time"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(e: DateTimePickerEvent, d?: Date) => {
-              setShowTimePicker(Platform.OS === 'ios');
-              if (d) setDateTime(prev => { const next = new Date(prev); next.setHours(d.getHours(), d.getMinutes()); return next; });
-            }}
+            onChange={(d) => setDateTime(prev => { const next = new Date(prev); next.setHours(d.getHours(), d.getMinutes()); return next; })}
+            onClose={() => setShowTimePicker(false)}
           />
         )}
       </FormField>
@@ -277,14 +271,11 @@ function InternalForm({ navigation }: { navigation: any }) {
           <Text style={styles.pickerBtnText}>{format(dueDate, 'EEEE, MMMM d, yyyy')}</Text>
         </TouchableOpacity>
         {showDatePicker && (
-          <DateTimePicker
+          <DateTimePickerCompat
             value={dueDate}
             mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            onChange={(e: DateTimePickerEvent, d?: Date) => {
-              setShowDatePicker(Platform.OS === 'ios');
-              if (d) setDueDate(d);
-            }}
+            onChange={(d) => setDueDate(d)}
+            onClose={() => setShowDatePicker(false)}
           />
         )}
       </FormField>
@@ -396,14 +387,11 @@ function InterdayForm({ navigation }: { navigation: any }) {
               <Text style={styles.pickerBtnText}>{format(timeValue, 'h:mm a')}</Text>
             </TouchableOpacity>
             {showTimePicker && (
-              <DateTimePicker
+              <DateTimePickerCompat
                 value={timeValue}
                 mode="time"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(e: DateTimePickerEvent, d?: Date) => {
-                  setShowTimePicker(Platform.OS === 'ios');
-                  if (d) setTimeValue(d);
-                }}
+                onChange={(d) => setTimeValue(d)}
+                onClose={() => setShowTimePicker(false)}
               />
             )}
           </>
