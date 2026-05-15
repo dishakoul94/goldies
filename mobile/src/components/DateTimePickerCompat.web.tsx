@@ -3,7 +3,7 @@ import { View } from 'react-native';
 
 interface Props {
   value: Date;
-  mode: 'date' | 'time';
+  mode: 'date' | 'time' | 'datetime';
   onChange: (date: Date) => void;
   onClose?: () => void;
   minimumDate?: Date;

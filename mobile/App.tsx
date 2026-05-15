@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import { RootStackParamList, TabParamList } from './src/types';
 import { setupNotifications } from './src/notifications';
+import { loadMockTime } from './src/utils/mockTime';
 import { COLORS } from './src/utils/theme';
 import TodayScreen from './src/screens/TodayScreen';
 import TasksScreen from './src/screens/TasksScreen';
@@ -69,6 +70,7 @@ export default function App() {
   const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
 
   useEffect(() => {
+    loadMockTime();
     setupNotifications();
 
     // Case 1: app was fully closed and launched by tapping a notification
