@@ -9,8 +9,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import DateTimePickerCompat from '../components/DateTimePickerCompat';
 import { format, parseISO } from 'date-fns';
-import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit } from '../types';
-import { getTaskById, updateTask } from '../storage';
+import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider } from '../types';
+import { getTaskById, updateTask, addServiceProvider } from '../storage';
+import ServiceProviderPicker, { ProviderSelection } from '../components/ServiceProviderPicker';
 import { cancelNotifications, scheduleExternalTaskNotifications, scheduleInternalTaskNotification, scheduleInterdayTaskNotifications } from '../notifications';
 import { COLORS, FONT, SPACING, RADIUS } from '../utils/theme';
 import { showAlert } from '../utils/alert';
@@ -69,6 +70,10 @@ export default function EditTaskScreen() {
   );
 }
 
+function makeId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation: any }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? '');
@@ -80,6 +85,11 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
   const [recurUnit, setRecurUnit] = useState<RecurrenceUnit>(task.recurrence?.unit ?? 'weeks');
   const [earlyReminderDays, setEarlyReminderDays] = useState(task.earlyReminderDays);
   const [dayOfReminder, setDayOfReminder] = useState(task.dayOfReminder);
+  const [providerSelection, setProviderSelection] = useState<ProviderSelection>(
+    task.serviceProviderId
+      ? { type: 'existing', providerId: task.serviceProviderId }
+      : { type: 'none' },
+  );
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -90,6 +100,22 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
       const recurrence: Recurrence | undefined = isRecurring
         ? { every: parseInt(recurEvery) || 1, unit: recurUnit }
         : undefined;
+
+      let serviceProviderId: string | undefined;
+      if (providerSelection.type === 'existing') {
+        serviceProviderId = providerSelection.providerId;
+      } else if (providerSelection.type === 'new' && providerSelection.draft.name.trim()) {
+        const newProvider: ServiceProvider = {
+          id: makeId(),
+          name: providerSelection.draft.name.trim(),
+          specialty: providerSelection.draft.specialty.trim() || undefined,
+          phone: providerSelection.draft.phone.trim() || undefined,
+          createdAt: new Date().toISOString(),
+        };
+        await addServiceProvider(newProvider);
+        serviceProviderId = newProvider.id;
+      }
+
       const updated: ExternalTask = {
         ...task,
         title: title.trim(),
@@ -98,6 +124,7 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
         recurrence,
         earlyReminderDays,
         dayOfReminder,
+        serviceProviderId,
         notificationIds: [],
       };
       const ids = await scheduleExternalTaskNotifications(updated);
@@ -111,6 +138,9 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
 
   return (
     <>
+      <FormField label="Service Provider">
+        <ServiceProviderPicker value={providerSelection} onChange={setProviderSelection} />
+      </FormField>
       <FormField label="Title">
         <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholderTextColor={COLORS.TEXT_MUTED} returnKeyType="done" />
       </FormField>

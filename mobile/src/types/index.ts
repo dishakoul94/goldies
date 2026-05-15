@@ -2,6 +2,24 @@ export type TaskKind = 'external' | 'internal' | 'interday';
 export type RecurrenceUnit = 'days' | 'weeks' | 'months';
 export type InterdayGroup = 'morning' | 'afternoon' | 'evening' | 'none';
 
+export interface UserProfile {
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: string; // YYYY-MM-DD
+  email?: string;
+}
+
+export interface ServiceProvider {
+  id: string;
+  name: string;
+  specialty?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface Recurrence {
   every: number;
   unit: RecurrenceUnit;
@@ -16,6 +34,7 @@ export interface ExternalTask {
   recurrence?: Recurrence;
   earlyReminderDays: number;  // 0 = no early reminder
   dayOfReminder: boolean;
+  serviceProviderId?: string;
   notificationIds: string[];
   createdAt: string;
   completedAt?: string;
@@ -63,6 +82,7 @@ export type TabParamList = {
   Today: undefined;
   Tasks: undefined;
   Chat: undefined;
+  Profile: undefined;
 };
 
 export type RootStackParamList = {
@@ -70,4 +90,5 @@ export type RootStackParamList = {
   AddTask: { kind: TaskKind };
   EditTask: { taskId: string };
   TaskDetail: { taskId: string };
+  ServiceProviderForm: { providerId?: string };
 };
