@@ -2,7 +2,7 @@ import { Task, ExternalTask } from './types';
 import { addDays, parseISO, isToday, isWithinInterval, format } from 'date-fns';
 
 export const BASE_URL = __DEV__
-  ? 'http://10.0.0.209:8000'
+  ? 'http://localhost:8000'
   : 'https://your-goldies-backend.up.railway.app';
 
 export async function sendChatMessage(
