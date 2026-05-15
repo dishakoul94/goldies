@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Task, ExternalTask, InternalTask, InterdayTask, ChatMessage, UserProfile, ServiceProvider } from './types';
 import { isToday, parseISO, addDays, isWithinInterval, format } from 'date-fns';
+import { getNow } from './utils/mockTime';
 
 const KEYS = {
   TASKS: 'goldies_tasks',
@@ -114,7 +115,7 @@ export async function getServiceProviderById(id: string): Promise<ServiceProvide
 // ─── Pure query helpers (synchronous, operate on already-loaded tasks) ──────
 
 export function getTasksDueToday(tasks: Task[]): Task[] {
-  const now = new Date();
+  const now = getNow();
   return tasks.filter(task => {
     if ((task.kind === 'external' || task.kind === 'internal') && task.completedAt) return false;
     if (task.kind === 'interday' && task.archivedAt) return false;
@@ -139,7 +140,7 @@ export function getTasksDueToday(tasks: Task[]): Task[] {
 }
 
 export function getUpcomingExternal(tasks: Task[], days: number): ExternalTask[] {
-  const now = new Date();
+  const now = getNow();
   const cutoff = addDays(now, days);
   return tasks
     .filter((t): t is ExternalTask => t.kind === 'external' && !t.completedAt)

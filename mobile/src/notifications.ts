@@ -4,6 +4,7 @@ import {
   addDays, addWeeks, addMonths, parseISO, subDays, isBefore, format,
 } from 'date-fns';
 import { ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence } from './types';
+import { getNow } from './utils/mockTime';
 
 export async function setupNotifications(): Promise<boolean> {
   Notifications.setNotificationHandler({
@@ -51,7 +52,7 @@ function computeOccurrences(startISO: string, recurrence: Recurrence, count: num
 export async function scheduleExternalTaskNotifications(task: ExternalTask): Promise<string[]> {
   if (Platform.OS === 'web') return [];
   const ids: string[] = [];
-  const now = new Date();
+  const now = getNow();
 
   const occurrences = task.recurrence
     ? computeOccurrences(task.dateTime, task.recurrence, 4)
@@ -64,16 +65,18 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask): Pro
       const earlyDate = subDays(occ, task.earlyReminderDays);
       earlyDate.setHours(9, 0, 0, 0);
       if (!isBefore(earlyDate, now)) {
-        const id = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'Upcoming Appointment',
-            body: `"${task.title}" is in ${task.earlyReminderDays} day${task.earlyReminderDays > 1 ? 's' : ''}.`,
-            sound: true,
-            data: { taskId: task.id },
-          },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: earlyDate },
-        });
-        ids.push(id);
+        try {
+          const id = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Upcoming Appointment',
+              body: `"${task.title}" is in ${task.earlyReminderDays} day${task.earlyReminderDays > 1 ? 's' : ''}.`,
+              sound: true,
+              data: { taskId: task.id },
+            },
+            trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: earlyDate },
+          });
+          ids.push(id);
+        } catch { /* trigger date is in the real past — skip */ }
       }
     }
 
@@ -81,17 +84,19 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask): Pro
       const dayOf = new Date(occ);
       if (dayOf.getHours() < 9) dayOf.setHours(9, 0, 0, 0);
       if (!isBefore(dayOf, now)) {
-        const timeStr = format(occ, 'h:mm a');
-        const id = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: `Today: ${task.title}`,
-            body: `Your appointment is today at ${timeStr}.`,
-            sound: true,
-            data: { taskId: task.id },
-          },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: dayOf },
-        });
-        ids.push(id);
+        try {
+          const timeStr = format(occ, 'h:mm a');
+          const id = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `Today: ${task.title}`,
+              body: `Your appointment is today at ${timeStr}.`,
+              sound: true,
+              data: { taskId: task.id },
+            },
+            trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: dayOf },
+          });
+          ids.push(id);
+        } catch { /* trigger date is in the real past — skip */ }
       }
     }
   }
@@ -104,27 +109,21 @@ export async function scheduleInternalTaskNotification(task: InternalTask): Prom
   if (Platform.OS === 'web') return [];
   const dueDate = new Date(task.nextDueDate + 'T12:00:00');
   dueDate.setHours(9, 0, 0, 0);
-  const now = new Date();
+  const now = getNow();
   // If 9AM has already passed today, fire 2 minutes from now instead
-  if (isBefore(dueDate, now)) {
-    const soonDate = new Date(now.getTime() + 2 * 60 * 1000);
+  const triggerDate = isBefore(dueDate, now)
+    ? new Date(new Date().getTime() + 2 * 60 * 1000) // 2 min from real now
+    : dueDate;
+
+  try {
     const id = await Notifications.scheduleNotificationAsync({
       content: { title: 'Reminder', body: task.title, sound: true, data: { taskId: task.id } },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: soonDate },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerDate },
     });
     return [id];
+  } catch {
+    return [];
   }
-
-  const id = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Reminder',
-      body: task.title,
-      sound: true,
-      data: { taskId: task.id },
-    },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: dueDate },
-  });
-  return [id];
 }
 
 // ─── Interday Task ───────────────────────────────────────────────────────────

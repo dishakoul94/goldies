@@ -3,7 +3,6 @@ import {
   View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity,
   Switch, Platform, KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -38,19 +37,17 @@ export default function AddTaskScreen() {
   const kind = route.params.kind;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <Text style={styles.formTitle}>
-            {kind === 'external' ? '📅 New Appointment' : kind === 'internal' ? '✅ New To-Do' : '🔁 New Daily Task'}
-          </Text>
+    <View style={styles.safe}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator>
+        <Text style={styles.formTitle}>
+          {kind === 'external' ? '📅 New Appointment' : kind === 'internal' ? '✅ New To-Do' : '🔁 New Daily Task'}
+        </Text>
 
-          {kind === 'external' && <ExternalForm navigation={navigation} />}
-          {kind === 'internal' && <InternalForm navigation={navigation} />}
-          {kind === 'interday' && <InterdayForm navigation={navigation} />}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        {kind === 'external' && <ExternalForm navigation={navigation} />}
+        {kind === 'internal' && <InternalForm navigation={navigation} />}
+        {kind === 'interday' && <InterdayForm navigation={navigation} />}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -520,7 +517,7 @@ function SaveButton({ onPress, loading }: { onPress: () => void; loading: boolea
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.BACKGROUND },
-  container: { padding: SPACING.MD, paddingBottom: SPACING.XL },
+  container: { padding: SPACING.MD, paddingBottom: 60 },
   formTitle: { fontSize: FONT.TITLE_CARD, fontWeight: '800', color: COLORS.TEXT, marginBottom: SPACING.LG },
   field: { marginBottom: SPACING.MD },
   label: { fontSize: FONT.BODY_SM, fontWeight: '700', color: COLORS.TEXT, marginBottom: SPACING.XS },

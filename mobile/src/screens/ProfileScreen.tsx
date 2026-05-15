@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity, Platform,
+  View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity, Platform, Modal, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -13,6 +13,7 @@ import { RootStackParamList, UserProfile, ServiceProvider } from '../types';
 import {
   loadUserProfile, saveUserProfile, loadServiceProviders, deleteServiceProvider,
 } from '../storage';
+import { getMockTime, saveMockTime } from '../utils/mockTime';
 import { COLORS, FONT, SPACING, RADIUS } from '../utils/theme';
 import { showAlert, showConfirm } from '../utils/alert';
 
@@ -26,6 +27,10 @@ export default function ProfileScreen() {
   const [showDobPicker, setShowDobPicker] = useState(false);
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
   const [saving, setSaving] = useState(false);
+  const [mockTime, setMockTime] = useState<Date | null>(getMockTime);
+  const [showMockPicker, setShowMockPicker] = useState(false);
+  const [mockDateText, setMockDateText] = useState('');
+  const [mockTimeText, setMockTimeText] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -33,6 +38,7 @@ export default function ProfileScreen() {
         if (p) { setProfile(p); setDraft(p); }
       });
       loadServiceProviders().then(setProviders);
+      setMockTime(getMockTime());
     }, []),
   );
 
@@ -80,6 +86,46 @@ export default function ProfileScreen() {
       },
       'Remove',
     );
+  };
+
+  const openMockPicker = () => {
+    const base = mockTime ?? new Date();
+    setMockDateText(format(base, 'yyyy-MM-dd'));
+    setMockTimeText(format(base, 'HH:mm'));
+    setShowMockPicker(true);
+  };
+
+  const confirmMockTime = async () => {
+    const parsed = new Date(`${mockDateText}T${mockTimeText}:00`);
+    if (isNaN(parsed.getTime())) {
+      showAlert('Invalid format. Use YYYY-MM-DD and HH:MM.');
+      return;
+    }
+    await saveMockTime(parsed);
+    setMockTime(parsed);
+    setShowMockPicker(false);
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  // Web only: datetime-local input changed → save immediately
+  const handleMockWebChange = async (e: any) => {
+    const val: string = e.target.value;
+    if (!val) return;
+    const date = new Date(val);
+    await saveMockTime(date);
+    setMockTime(date);
+  };
+
+  const resetMockTime = async () => {
+    await saveMockTime(null);
+    setMockTime(null);
+    setShowMockPicker(false);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const toDatetimeLocalValue = (d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
   return (
@@ -219,6 +265,108 @@ export default function ProfileScreen() {
             />
           ))
         )}
+
+        {/* ── Developer Settings ── */}
+        <View style={[styles.sectionHeader, { marginTop: SPACING.LG }]}>
+          <Text style={styles.sectionTitle}>Developer</Text>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.profileRow}>
+            <Ionicons name="time-outline" size={20} color={COLORS.PRIMARY} style={styles.profileRowIcon} />
+            <View style={styles.profileRowText}>
+              <Text style={styles.profileRowLabel}>System Date Override</Text>
+              <Text style={styles.profileRowValue}>
+                {mockTime ? format(mockTime, 'MMM d, yyyy · h:mm a') : 'Using real system time'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.mockActions}>
+            {Platform.OS !== 'web' && (
+              <TouchableOpacity style={styles.mockPickerBtn} onPress={openMockPicker}>
+                <Ionicons name="calendar-outline" size={16} color={COLORS.PRIMARY} />
+                <Text style={styles.mockPickerBtnText}>Set Date & Time</Text>
+              </TouchableOpacity>
+            )}
+            {mockTime && (
+              <TouchableOpacity style={styles.mockResetBtn} onPress={resetMockTime}>
+                <Ionicons name="refresh-outline" size={16} color={COLORS.TEXT_SECONDARY} />
+                <Text style={styles.mockResetBtnText}>Reset</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {Platform.OS === 'web' && (
+            // @ts-ignore
+            <input
+              type="datetime-local"
+              value={toDatetimeLocalValue(mockTime ?? new Date())}
+              onChange={handleMockWebChange}
+              style={{
+                fontSize: 15,
+                padding: '10px 14px',
+                borderRadius: 12,
+                border: '1.5px solid #E0E0E0',
+                backgroundColor: '#F7F7F7',
+                color: '#1A1A1A',
+                width: '100%',
+                marginTop: 8,
+                boxSizing: 'border-box',
+                outline: 'none',
+              } as any}
+            />
+          )}
+
+          {/* Native: modal with inline date + spinner time pickers */}
+          {Platform.OS !== 'web' && (
+            <Modal
+              visible={showMockPicker}
+              transparent
+              animationType="slide"
+              onRequestClose={() => setShowMockPicker(false)}
+            >
+              <KeyboardAvoidingView style={styles.mockModalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                <View style={styles.mockModalCard}>
+                  <Text style={styles.mockModalTitle}>Set System Date & Time</Text>
+
+                  <Text style={styles.fieldLabel}>Date</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={mockDateText}
+                    onChangeText={setMockDateText}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={COLORS.TEXT_MUTED}
+                    keyboardType="numbers-and-punctuation"
+                    autoCorrect={false}
+                    returnKeyType="next"
+                  />
+
+                  <Text style={[styles.fieldLabel, { marginTop: SPACING.SM }]}>Time (24h)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={mockTimeText}
+                    onChangeText={setMockTimeText}
+                    placeholder="HH:MM"
+                    placeholderTextColor={COLORS.TEXT_MUTED}
+                    keyboardType="numbers-and-punctuation"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    onSubmitEditing={confirmMockTime}
+                  />
+
+                  <View style={styles.editActions}>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowMockPicker(false)}>
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.saveProfileBtn} onPress={confirmMockTime}>
+                      <Ionicons name="checkmark" size={18} color={COLORS.WHITE} />
+                      <Text style={styles.saveProfileBtnText}>Set Time</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </KeyboardAvoidingView>
+            </Modal>
+          )}
+        </View>
 
         <View style={{ height: SPACING.XL }} />
       </ScrollView>
@@ -480,4 +628,55 @@ const styles = StyleSheet.create({
   providerDetail: { fontSize: FONT.CAPTION, color: COLORS.TEXT_SECONDARY },
   providerCardActions: { flexDirection: 'row', gap: SPACING.XS, marginLeft: SPACING.SM },
   providerActionBtn: { padding: SPACING.XS },
+
+  // Mock time controls
+  mockActions: {
+    flexDirection: 'row',
+    gap: SPACING.SM,
+    paddingTop: SPACING.SM,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER,
+  },
+  mockPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.PRIMARY_LIGHT,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: 8,
+    borderRadius: RADIUS.CHIP,
+  },
+  mockPickerBtnText: { fontSize: FONT.CAPTION, fontWeight: '700', color: COLORS.PRIMARY },
+  mockResetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.BACKGROUND,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: 8,
+    borderRadius: RADIUS.CHIP,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+  },
+  mockResetBtnText: { fontSize: FONT.CAPTION, fontWeight: '600', color: COLORS.TEXT_SECONDARY },
+
+  // Mock time modal
+  mockModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  mockModalCard: {
+    backgroundColor: COLORS.CARD,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: SPACING.MD,
+    paddingBottom: SPACING.XL,
+  },
+  mockModalTitle: {
+    fontSize: FONT.TITLE_CARD,
+    fontWeight: '800',
+    color: COLORS.TEXT,
+    marginBottom: SPACING.SM,
+  },
 });
