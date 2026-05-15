@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import date
 from fastapi import APIRouter
@@ -7,6 +8,92 @@ import anthropic
 
 router = APIRouter()
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+
+TASK_TOOLS = [
+    {
+        "name": "create_external_task",
+        "description": (
+            "Create a calendar appointment or external event for the user. "
+            "Use when the user mentions a specific date and time for an appointment, "
+            "doctor visit, meeting, or any scheduled event. "
+            "Only call this if the user clearly intends to schedule something new."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Short title, e.g. 'Doctor appointment'"},
+                "dateTime": {
+                    "type": "string",
+                    "description": "ISO-8601 datetime string, e.g. '2025-05-16T14:00:00'. Resolve relative terms like 'Friday' using today's date from the system prompt.",
+                },
+                "earlyReminderDays": {
+                    "type": "integer",
+                    "description": "Days before to send early reminder. Default 1.",
+                    "default": 1,
+                },
+                "dayOfReminder": {
+                    "type": "boolean",
+                    "description": "Send reminder on the morning of the appointment. Default true.",
+                    "default": True,
+                },
+                "notes": {"type": "string", "description": "Optional notes the user mentioned."},
+            },
+            "required": ["title", "dateTime"],
+        },
+    },
+    {
+        "name": "create_internal_task",
+        "description": (
+            "Create a to-do or recurring reminder. Use when the user wants to be reminded "
+            "to do something on a specific date or recurring schedule. "
+            "Do NOT use for time-specific appointments — use create_external_task instead."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Short title, e.g. 'Take blood pressure medication'"},
+                "nextDueDate": {"type": "string", "description": "First due date in YYYY-MM-DD format."},
+                "intervalDays": {
+                    "type": "integer",
+                    "description": "Repeat interval in days. 0 = one-time, 1 = daily, 7 = weekly.",
+                    "default": 0,
+                },
+                "notes": {"type": "string"},
+            },
+            "required": ["title", "nextDueDate"],
+        },
+    },
+    {
+        "name": "create_interday_task",
+        "description": (
+            "Create a daily routine task with no fixed calendar date (e.g. morning walk, evening stretches). "
+            "Use when the user wants a recurring daily habit tied to a time of day."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "group": {
+                    "type": "string",
+                    "enum": ["morning", "afternoon", "evening", "none"],
+                    "default": "none",
+                },
+                "canDefer": {"type": "boolean", "default": True},
+                "activeDays": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 0, "maximum": 6},
+                    "description": "0=Sun…6=Sat. Empty = every day.",
+                },
+                "timeSlot": {
+                    "type": "string",
+                    "description": "24h time string 'HH:MM', only if user gave a specific time.",
+                },
+                "notes": {"type": "string"},
+            },
+            "required": ["title", "group"],
+        },
+    },
+]
 
 
 class ChatRequest(BaseModel):
@@ -40,7 +127,6 @@ Today is {today}.
 async def chat(req: ChatRequest):
     system = build_system_prompt(req.tasks_context, req.user_name)
 
-    # Filter to valid message format for Claude
     messages = [
         {"role": m["role"], "content": m["content"]}
         for m in req.messages
@@ -55,17 +141,49 @@ async def chat(req: ChatRequest):
 
     async def generate():
         try:
+            tool_use_block = None
+            tool_input_buffer = ""
+            task_created = None
+
             with client.messages.stream(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=512,
                 system=system,
                 messages=messages,
+                tools=TASK_TOOLS,
+                tool_choice={"type": "auto"},
             ) as stream:
-                for text in stream.text_stream:
-                    yield f"data: {text}\n\n"
+                for event in stream:
+                    if event.type == "content_block_start":
+                        if event.content_block.type == "tool_use":
+                            tool_use_block = {"name": event.content_block.name}
+                            tool_input_buffer = ""
+
+                    elif event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            yield f"data: {event.delta.text}\n\n"
+                        elif event.delta.type == "input_json_delta":
+                            tool_input_buffer += event.delta.partial_json
+
+                    elif event.type == "content_block_stop":
+                        if tool_use_block is not None:
+                            try:
+                                tool_input = json.loads(tool_input_buffer)
+                            except json.JSONDecodeError:
+                                tool_input = {}
+                            task_created = {"tool": tool_use_block["name"], "input": tool_input}
+                            payload = json.dumps(task_created)
+                            yield f"event: task_create\ndata: {payload}\n\n"
+                            tool_use_block = None
+                            tool_input_buffer = ""
+
+            if task_created is not None:
+                title = task_created["input"].get("title", "your task")
+                yield f'data: Done! I\'ve added "{title}" to your schedule.\n\n'
+
             yield "data: [DONE]\n\n"
-        except Exception as e:
-            yield f"data: I'm having a little trouble right now. Please try again in a moment.\n\n"
+        except Exception:
+            yield "data: I'm having a little trouble right now. Please try again in a moment.\n\n"
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

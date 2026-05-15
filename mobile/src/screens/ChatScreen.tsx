@@ -7,9 +7,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { ChatMessage } from '../types';
-import { loadChatHistory, saveChatHistory, loadAllTasks, loadUserName } from '../storage';
+import { ChatMessage, TaskCreatePayload, ExternalTask, InternalTask, InterdayTask } from '../types';
+import { loadChatHistory, saveChatHistory, loadAllTasks, loadUserName, addTask } from '../storage';
 import { sendChatMessage, buildTasksContext } from '../api';
+import {
+  scheduleExternalTaskNotifications,
+  scheduleInternalTaskNotification,
+  scheduleInterdayTaskNotifications,
+} from '../notifications';
 import { COLORS, FONT, SPACING, RADIUS } from '../utils/theme';
 import { showAlert } from '../utils/alert';
 
@@ -43,6 +48,55 @@ export default function ChatScreen() {
   const scrollToBottom = () => {
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
   };
+
+  const handleTaskCreate = useCallback(async (payload: TaskCreatePayload) => {
+    const id = makeId();
+    const now = new Date().toISOString();
+    try {
+      if (payload.tool === 'create_external_task') {
+        const task: ExternalTask = {
+          id, kind: 'external',
+          title: payload.input.title ?? 'Appointment',
+          notes: payload.input.notes,
+          dateTime: payload.input.dateTime ?? now,
+          earlyReminderDays: payload.input.earlyReminderDays ?? 1,
+          dayOfReminder: payload.input.dayOfReminder ?? true,
+          notificationIds: [],
+          createdAt: now,
+        };
+        const ids = await scheduleExternalTaskNotifications(task);
+        await addTask({ ...task, notificationIds: ids });
+      } else if (payload.tool === 'create_internal_task') {
+        const task: InternalTask = {
+          id, kind: 'internal',
+          title: payload.input.title ?? 'Reminder',
+          notes: payload.input.notes,
+          nextDueDate: payload.input.nextDueDate ?? now.slice(0, 10),
+          intervalDays: payload.input.intervalDays ?? 0,
+          notificationIds: [],
+          createdAt: now,
+        };
+        const ids = await scheduleInternalTaskNotification(task);
+        await addTask({ ...task, notificationIds: ids });
+      } else if (payload.tool === 'create_interday_task') {
+        const task: InterdayTask = {
+          id, kind: 'interday',
+          title: payload.input.title ?? 'Daily task',
+          notes: payload.input.notes,
+          group: payload.input.group ?? 'none',
+          activeDays: payload.input.activeDays ?? [],
+          canDefer: payload.input.canDefer ?? true,
+          timeSlot: payload.input.timeSlot,
+          notificationIds: [],
+          createdAt: now,
+        };
+        const ids = await scheduleInterdayTaskNotifications(task);
+        await addTask({ ...task, notificationIds: ids });
+      }
+    } catch (err) {
+      console.warn('[Goldie] Task creation from chat failed:', err);
+    }
+  }, []);
 
   const handleSend = async () => {
     const text = input.trim();
@@ -92,6 +146,7 @@ export default function ChatScreen() {
           );
           scrollToBottom();
         },
+        handleTaskCreate,
       );
 
       // Save complete history
