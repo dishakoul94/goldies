@@ -10,9 +10,9 @@ export async function sendChatMessage(
   tasksContext: string,
   userName: string | null,
   onToken: (token: string) => void,
-  onTaskCreate?: (payload: TaskCreatePayload) => void,
-  onTaskDelete?: (payload: TaskDeletePayload) => void,
-  onTaskEdit?: (payload: TaskEditPayload) => void,
+  onTaskCreate?: (payload: TaskCreatePayload) => Promise<void> | void,
+  onTaskDelete?: (payload: TaskDeletePayload) => Promise<void> | void,
+  onTaskEdit?: (payload: TaskEditPayload) => Promise<void> | void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -25,6 +25,9 @@ export async function sendChatMessage(
     // Buffer incomplete lines — HTTP chunks can split mid-line, which would
     // truncate "event: task_delete" to "event: task_del" and break event detection.
     let lineBuffer = '';
+    // Collect promises from async task handlers so onload can await them before
+    // resolving — prevents a race where the user navigates before storage writes finish.
+    const pendingOps: Promise<void>[] = [];
 
     xhr.onprogress = () => {
       lineBuffer += xhr.responseText.slice(cursor);
@@ -45,17 +48,20 @@ export async function sendChatMessage(
           if (currentEventType === 'task_create') {
             try {
               const payload: TaskCreatePayload = JSON.parse(data);
-              onTaskCreate?.(payload);
+              const p = onTaskCreate?.(payload);
+              if (p) pendingOps.push(p);
             } catch { /* malformed JSON — ignore */ }
           } else if (currentEventType === 'task_delete') {
             try {
               const payload: TaskDeletePayload = JSON.parse(data);
-              onTaskDelete?.(payload);
+              const p = onTaskDelete?.(payload);
+              if (p) pendingOps.push(p);
             } catch { /* malformed JSON — ignore */ }
           } else if (currentEventType === 'task_edit') {
             try {
               const payload: TaskEditPayload = JSON.parse(data);
-              onTaskEdit?.(payload);
+              const p = onTaskEdit?.(payload);
+              if (p) pendingOps.push(p);
             } catch { /* malformed JSON — ignore */ }
           } else {
             onToken(data);
@@ -66,10 +72,19 @@ export async function sendChatMessage(
     };
 
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
+      const finish = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+        } else {
+          reject(new Error(`Server error: ${xhr.status}`));
+        }
+      };
+      // Wait for any in-flight storage writes before resolving so callers
+      // (and subsequent navigation) see a consistent AsyncStorage state.
+      if (pendingOps.length > 0) {
+        Promise.all(pendingOps).then(finish, finish);
       } else {
-        reject(new Error(`Server error: ${xhr.status}`));
+        finish();
       }
     };
 
