@@ -79,8 +79,10 @@ export default function ChatScreen() {
           notificationIds: [],
           createdAt: now,
         };
-        const ids = await scheduleExternalTaskNotifications(task);
-        await addTask({ ...task, notificationIds: ids });
+        // Persist first so the task exists even if notification scheduling fails.
+        await addTask(task);
+        const ids = await scheduleExternalTaskNotifications(task).catch(() => []);
+        if (ids.length > 0) await updateTask({ ...task, notificationIds: ids });
       } else if (payload.tool === 'create_internal_task') {
         const task: InternalTask = {
           id, kind: 'internal',
@@ -91,8 +93,9 @@ export default function ChatScreen() {
           notificationIds: [],
           createdAt: now,
         };
-        const ids = await scheduleInternalTaskNotification(task);
-        await addTask({ ...task, notificationIds: ids });
+        await addTask(task);
+        const ids = await scheduleInternalTaskNotification(task).catch(() => []);
+        if (ids.length > 0) await updateTask({ ...task, notificationIds: ids });
       } else if (payload.tool === 'create_interday_task') {
         const task: InterdayTask = {
           id, kind: 'interday',
@@ -105,8 +108,9 @@ export default function ChatScreen() {
           notificationIds: [],
           createdAt: now,
         };
-        const ids = await scheduleInterdayTaskNotifications(task);
-        await addTask({ ...task, notificationIds: ids });
+        await addTask(task);
+        const ids = await scheduleInterdayTaskNotifications(task).catch(() => []);
+        if (ids.length > 0) await updateTask({ ...task, notificationIds: ids });
       }
     } catch (err) {
       console.warn('[Goldie] Task creation from chat failed:', err);
