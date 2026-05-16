@@ -83,7 +83,11 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
   const [isRecurring, setIsRecurring] = useState(!!task.recurrence);
   const [recurEvery, setRecurEvery] = useState(String(task.recurrence?.every ?? 1));
   const [recurUnit, setRecurUnit] = useState<RecurrenceUnit>(task.recurrence?.unit ?? 'weeks');
-  const [earlyReminderDays, setEarlyReminderDays] = useState(task.earlyReminderDays);
+  const [earlyReminderDays, setEarlyReminderDays] = useState<number[]>(
+    Array.isArray(task.earlyReminderDays)
+      ? task.earlyReminderDays
+      : (task.earlyReminderDays as unknown as number) > 0 ? [task.earlyReminderDays as unknown as number] : [],
+  );
   const [dayOfReminder, setDayOfReminder] = useState(task.dayOfReminder);
   const [providerSelection, setProviderSelection] = useState<ProviderSelection>(
     task.serviceProviderId
@@ -187,11 +191,21 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
       </FormField>
       <FormField label="Early reminder">
         <View style={styles.chipRow}>
-          {EARLY_REMINDER_OPTIONS.map(n => (
-            <TouchableOpacity key={n} style={[styles.chip, earlyReminderDays === n && styles.chipActive]} onPress={() => setEarlyReminderDays(n)}>
-              <Text style={[styles.chipLabel, earlyReminderDays === n && styles.chipLabelActive]}>{n === 0 ? 'None' : `${n}d`}</Text>
-            </TouchableOpacity>
-          ))}
+          {EARLY_REMINDER_OPTIONS.map(n => {
+            const isNone = n === 0;
+            const active = isNone ? earlyReminderDays.length === 0 : earlyReminderDays.includes(n);
+            const toggle = () => {
+              if (isNone) { setEarlyReminderDays([]); return; }
+              setEarlyReminderDays(prev =>
+                prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n],
+              );
+            };
+            return (
+              <TouchableOpacity key={n} style={[styles.chip, active && styles.chipActive]} onPress={toggle}>
+                <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{isNone ? 'None' : `${n}d`}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </FormField>
       <FormField label="Remind on the day">

@@ -67,14 +67,17 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask): Pro
   for (const occ of occurrences) {
     if (isBefore(occ, now)) continue;
 
-    if (task.earlyReminderDays > 0) {
-      const earlyDate = subDays(occ, task.earlyReminderDays);
+    const reminderDays = Array.isArray(task.earlyReminderDays)
+      ? task.earlyReminderDays
+      : (task.earlyReminderDays as unknown as number) > 0 ? [task.earlyReminderDays as unknown as number] : [];
+    for (const days of reminderDays) {
+      const earlyDate = subDays(occ, days);
       earlyDate.setHours(9, 0, 0, 0);
       if (!isBefore(earlyDate, now)) {
         const id = await Notifications.scheduleNotificationAsync({
           content: {
             title: 'Upcoming Appointment',
-            body: `"${task.title}" is in ${task.earlyReminderDays} day${task.earlyReminderDays > 1 ? 's' : ''}.`,
+            body: `"${task.title}" is in ${days} day${days > 1 ? 's' : ''}.`,
             sound: true,
             data: { taskId: task.id },
           },
