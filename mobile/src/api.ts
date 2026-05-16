@@ -3,7 +3,7 @@ import { addDays, parseISO, isToday, isWithinInterval, format } from 'date-fns';
 
 export const BASE_URL = __DEV__
   ? 'http://localhost:8000'
-  : 'https://your-goldies-backend.up.railway.app';
+  : 'https://goldies-production.up.railway.app';
 
 export async function sendChatMessage(
   messages: Array<{ role: string; content: string }>,
