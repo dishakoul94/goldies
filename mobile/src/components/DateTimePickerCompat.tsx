@@ -18,7 +18,7 @@ export default function DateTimePickerCompat({ value, mode, onChange, onClose, m
   const insets = useSafeAreaInsets();
 
   if (Platform.OS === 'ios') {
-    const iosDisplay: DisplayMode = display ?? (mode === 'time' ? 'spinner' : 'inline');
+    const iosDisplay: DisplayMode = display ?? 'spinner';
     return (
       <Modal transparent animationType="slide" visible onRequestClose={onClose}>
         <View style={[styles.overlay, { paddingTop: Math.max(insets.top + 40, 100) }]}>
@@ -33,8 +33,7 @@ export default function DateTimePickerCompat({ value, mode, onChange, onClose, m
               mode={mode}
               display={iosDisplay}
               minimumDate={minimumDate}
-              style={iosDisplay === 'inline' ? styles.inlinePicker : undefined}
-              onChange={(_e: DateTimePickerEvent, d?: Date) => {
+onChange={(_e: DateTimePickerEvent, d?: Date) => {
                 if (d) onChange(d);
               }}
             />
@@ -81,8 +80,5 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: '#007AFF',
-  },
-  inlinePicker: {
-    height: 340,
   },
 });
