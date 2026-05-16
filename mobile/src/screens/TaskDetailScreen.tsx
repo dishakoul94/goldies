@@ -168,7 +168,16 @@ function ExternalMeta({ task, provider }: { task: ExternalTask; provider: Servic
       {task.recurrence && (
         <MetaRow icon="repeat" label="Repeats" value={`Every ${task.recurrence.every} ${task.recurrence.unit}`} />
       )}
-      <MetaRow icon="notifications" label="Early reminder" value={task.earlyReminderDays === 0 ? 'None' : `${task.earlyReminderDays} day(s) before`} />
+      <MetaRow icon="notifications" label="Early reminder" value={
+        (() => {
+          const days = Array.isArray(task.earlyReminderDays)
+            ? task.earlyReminderDays
+            : (task.earlyReminderDays as unknown as number) > 0 ? [task.earlyReminderDays as unknown as number] : [];
+          return days.length === 0
+            ? 'None'
+            : days.sort((a, b) => b - a).map(d => `${d} day${d > 1 ? 's' : ''}`).join(', ') + ' before';
+        })()
+      } />
       <MetaRow icon="alarm" label="Day-of reminder" value={task.dayOfReminder ? 'On' : 'Off'} />
       {provider && (
         <MetaRow

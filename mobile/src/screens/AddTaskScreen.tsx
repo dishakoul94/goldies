@@ -69,7 +69,7 @@ function ExternalForm({ navigation }: { navigation: any }) {
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurEvery, setRecurEvery] = useState('1');
   const [recurUnit, setRecurUnit] = useState<RecurrenceUnit>('weeks');
-  const [earlyReminderDays, setEarlyReminderDays] = useState(0);
+  const [earlyReminderDays, setEarlyReminderDays] = useState<number[]>([]);
   const [dayOfReminder, setDayOfReminder] = useState(true);
   const [providerSelection, setProviderSelection] = useState<ProviderSelection>({ type: 'none' });
   const [saving, setSaving] = useState(false);
@@ -215,17 +215,27 @@ function ExternalForm({ navigation }: { navigation: any }) {
 
       <FormField label="Early reminder">
         <View style={styles.chipRow}>
-          {EARLY_REMINDER_OPTIONS.map(n => (
-            <TouchableOpacity
-              key={n}
-              style={[styles.chip, earlyReminderDays === n && styles.chipActive]}
-              onPress={() => setEarlyReminderDays(n)}
-            >
-              <Text style={[styles.chipLabel, earlyReminderDays === n && styles.chipLabelActive]}>
-                {n === 0 ? 'None' : `${n}d`}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {EARLY_REMINDER_OPTIONS.map(n => {
+            const isNone = n === 0;
+            const active = isNone ? earlyReminderDays.length === 0 : earlyReminderDays.includes(n);
+            const toggle = () => {
+              if (isNone) { setEarlyReminderDays([]); return; }
+              setEarlyReminderDays(prev =>
+                prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n],
+              );
+            };
+            return (
+              <TouchableOpacity
+                key={n}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={toggle}
+              >
+                <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
+                  {isNone ? 'None' : `${n}d`}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </FormField>
 

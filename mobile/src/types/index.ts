@@ -32,7 +32,7 @@ export interface ExternalTask {
   notes?: string;
   dateTime: string;           // ISO-8601 date+time
   recurrence?: Recurrence;
-  earlyReminderDays: number;  // 0 = no early reminder
+  earlyReminderDays: number[];  // empty = no early reminder; each value = days before
   dayOfReminder: boolean;
   serviceProviderId?: string;
   notificationIds: string[];
@@ -85,7 +85,7 @@ export interface TaskCreatePayload {
     notes?: string;
     // ExternalTask
     dateTime?: string;
-    earlyReminderDays?: number;
+    earlyReminderDays?: number[];
     dayOfReminder?: boolean;
     // InternalTask
     nextDueDate?: string;
@@ -114,7 +114,7 @@ export interface TaskEditPayload {
     newNotes?: string;
     // ExternalTask
     newDateTime?: string;
-    newEarlyReminderDays?: number;
+    newEarlyReminderDays?: number[];
     newDayOfReminder?: boolean;
     // InternalTask
     newNextDueDate?: string;

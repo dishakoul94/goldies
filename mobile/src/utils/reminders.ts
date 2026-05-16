@@ -52,8 +52,11 @@ export function getUpcomingReminders(tasks: Task[], windowDays = 14): UpcomingRe
       for (const occ of occurrences) {
         if (isBefore(occ, now)) continue;
 
-        if (task.earlyReminderDays > 0) {
-          const earlyDate = subDays(occ, task.earlyReminderDays);
+        const reminderDays = Array.isArray(task.earlyReminderDays)
+          ? task.earlyReminderDays
+          : (task.earlyReminderDays as unknown as number) > 0 ? [task.earlyReminderDays as unknown as number] : [];
+        for (const days of reminderDays) {
+          const earlyDate = subDays(occ, days);
           earlyDate.setHours(9, 0, 0, 0);
           const startOfEarlyDay = new Date(earlyDate);
           startOfEarlyDay.setHours(0, 0, 0, 0);
@@ -61,11 +64,11 @@ export function getUpcomingReminders(tasks: Task[], windowDays = 14): UpcomingRe
           startOfToday.setHours(0, 0, 0, 0);
           if (!isBefore(startOfEarlyDay, startOfToday) && isBefore(earlyDate, cutoff)) {
             reminders.push({
-              key: `${task.id}_early_${occ.getTime()}`,
+              key: `${task.id}_early_${days}_${occ.getTime()}`,
               taskId: task.id,
               date: earlyDate,
               title: 'Upcoming Appointment',
-              body: `"${task.title}" is in ${task.earlyReminderDays} day${task.earlyReminderDays > 1 ? 's' : ''}.`,
+              body: `"${task.title}" is in ${days} day${days > 1 ? 's' : ''}.`,
               kind: 'external',
             });
           }

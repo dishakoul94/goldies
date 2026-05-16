@@ -74,7 +74,7 @@ export default function ChatScreen() {
           title: payload.input.title ?? 'Appointment',
           notes: payload.input.notes,
           dateTime: payload.input.dateTime ?? now,
-          earlyReminderDays: payload.input.earlyReminderDays ?? 1,
+          earlyReminderDays: payload.input.earlyReminderDays ?? [1],
           dayOfReminder: payload.input.dayOfReminder ?? true,
           notificationIds: [],
           createdAt: now,
