@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, Modal, View, TouchableOpacity, Text, StyleSheet, Dimensions } from 'react-native';
+import { Platform, Modal, View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,14 +16,13 @@ interface Props {
 
 export default function DateTimePickerCompat({ value, mode, onChange, onClose, minimumDate, display }: Props) {
   const insets = useSafeAreaInsets();
-  const screenHeight = Dimensions.get('window').height;
 
   if (Platform.OS === 'ios') {
     const iosDisplay: DisplayMode = display ?? (mode === 'time' ? 'spinner' : 'inline');
     return (
       <Modal transparent animationType="slide" visible onRequestClose={onClose}>
-        <View style={styles.overlay}>
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16), maxHeight: screenHeight * 0.75 }]}>
+        <View style={[styles.overlay, { paddingTop: Math.max(insets.top + 40, 100) }]}>
+          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <View style={styles.toolbar}>
               <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Text style={styles.doneBtn}>Done</Text>
