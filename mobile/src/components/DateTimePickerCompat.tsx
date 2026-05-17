@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Platform, Modal, View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -118,9 +118,75 @@ function JsCalendarPicker({ value, minimumDate, onSelect, onCancel }: {
   );
 }
 
+function JSTimePicker({ value, onChange, onClose, insetBottom }: {
+  value: Date; onChange: (d: Date) => void; onClose?: () => void; insetBottom: number;
+}) {
+  const selectedRef = useRef({ hours: value.getHours(), minutes: value.getMinutes() });
+  const [displayH, setDisplayH] = useState(value.getHours());
+  const [displayM, setDisplayM] = useState(value.getMinutes());
+
+  // All mutations go through functional updaters so the Modal's potentially
+  // stale closures always read/write the latest state via React's update queue.
+  // selectedRef is also kept in sync so handleDone can read it synchronously.
+  const incHour = () => setDisplayH(prev => { const h = (prev + 1) % 24; selectedRef.current = { ...selectedRef.current, hours: h }; return h; });
+  const decHour = () => setDisplayH(prev => { const h = (prev + 23) % 24; selectedRef.current = { ...selectedRef.current, hours: h }; return h; });
+  const incMin  = () => setDisplayM(prev => { const m = (prev + 1) % 60; selectedRef.current = { ...selectedRef.current, minutes: m }; return m; });
+  const decMin  = () => setDisplayM(prev => { const m = (prev + 59) % 60; selectedRef.current = { ...selectedRef.current, minutes: m }; return m; });
+  const toggleAMPM = () => setDisplayH(prev => { const h = prev >= 12 ? prev - 12 : prev + 12; selectedRef.current = { ...selectedRef.current, hours: h }; return h; });
+
+  // handleDone reads from selectedRef — a stable mutable object — so it
+  // always has the latest value regardless of which render's closure runs.
+  const handleDone = () => {
+    const d = new Date(value);
+    d.setHours(selectedRef.current.hours, selectedRef.current.minutes, 0, 0);
+    onChange(d);
+    onClose?.();
+  };
+
+  const hour12 = displayH % 12 || 12;
+  const isPM = displayH >= 12;
+
+  return (
+    <Modal transparent animationType="slide" visible onRequestClose={handleDone}>
+      <View style={styles.overlay}>
+        <View style={[styles.sheet, { paddingBottom: insetBottom }]}>
+          <View style={styles.toolbar}>
+            <TouchableOpacity onPress={handleDone} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Text style={styles.doneBtn}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={tp.row}>
+            <View style={tp.col}>
+              <TouchableOpacity onPress={incHour} hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}>
+                <Text style={tp.arrow}>▲</Text>
+              </TouchableOpacity>
+              <Text style={tp.digit}>{String(hour12).padStart(2, '0')}</Text>
+              <TouchableOpacity onPress={decHour} hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}>
+                <Text style={tp.arrow}>▼</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={tp.colon}>:</Text>
+            <View style={tp.col}>
+              <TouchableOpacity onPress={incMin} hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}>
+                <Text style={tp.arrow}>▲</Text>
+              </TouchableOpacity>
+              <Text style={tp.digit}>{String(displayM).padStart(2, '0')}</Text>
+              <TouchableOpacity onPress={decMin} hitSlop={{ top: 8, bottom: 8, left: 16, right: 16 }}>
+                <Text style={tp.arrow}>▼</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={toggleAMPM} style={tp.ampmBtn}>
+              <Text style={tp.ampmText}>{isPM ? 'PM' : 'AM'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function DateTimePickerCompat({ value, mode, onChange, onClose, minimumDate, display }: Props) {
   const insets = useSafeAreaInsets();
-  const [localValue, setLocalValue] = useState(value);
 
   if (Platform.OS === 'ios') {
     if (mode === 'date') {
@@ -134,30 +200,11 @@ export default function DateTimePickerCompat({ value, mode, onChange, onClose, m
       );
     }
 
-    // Time mode: Modal with spinner + Done button.
-    const handleDone = () => { onChange(localValue); onClose?.(); };
-    return (
-      <Modal transparent animationType="slide" visible onRequestClose={handleDone}>
-        <View style={styles.overlay}>
-          <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-            <View style={styles.toolbar}>
-              <TouchableOpacity onPress={handleDone} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Text style={styles.doneBtn}>Done</Text>
-              </TouchableOpacity>
-            </View>
-            <DateTimePicker
-              value={localValue}
-              mode="time"
-              display={display ?? 'spinner'}
-              style={styles.picker}
-              onChange={(_e: DateTimePickerEvent, d?: Date) => {
-                if (d) setLocalValue(d);
-              }}
-            />
-          </View>
-        </View>
-      </Modal>
-    );
+    // Time mode: pure-JS picker in a Modal sheet.
+    // Avoids native DateTimePicker onChange bridge timing issues entirely.
+    // selectedRef holds the current selection so handleDone always reads the
+    // latest value even if the Modal calls a stale closure of the handler.
+    return <JSTimePicker value={value} onChange={onChange} onClose={onClose} insetBottom={Math.max(insets.bottom, 16)} />;
   }
 
   return (
@@ -290,5 +337,50 @@ const cal = StyleSheet.create({
   cancelText: {
     fontSize: 16,
     color: '#8E8E93',
+  },
+});
+
+const tp = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    gap: 8,
+  },
+  col: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  arrow: {
+    fontSize: 20,
+    color: '#007AFF',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  digit: {
+    fontSize: 52,
+    fontWeight: '600',
+    color: '#000',
+    minWidth: 72,
+    textAlign: 'center',
+  },
+  colon: {
+    fontSize: 52,
+    fontWeight: '300',
+    color: '#000',
+    marginBottom: 4,
+  },
+  ampmBtn: {
+    marginLeft: 12,
+    backgroundColor: '#F2F2F7',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  ampmText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#007AFF',
   },
 });
