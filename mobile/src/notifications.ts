@@ -68,7 +68,7 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask, prof
   if (Platform.OS === 'web') return [];
   const ids: string[] = [];
   const now = getNow();
-  const { hour: remHour, minute: remMinute } = parseTimeStr(resolveReminderTimes(profile).defaultTime);
+  const { hour: remHour, minute: remMinute } = parseTimeStr(task.reminderTime ?? resolveReminderTimes(profile).defaultTime);
 
   const occurrences = task.recurrence
     ? computeOccurrences(task.dateTime, task.recurrence, 4)
@@ -122,7 +122,7 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask, prof
 
 export async function scheduleInternalTaskNotification(task: InternalTask, profile?: UserProfile | null): Promise<string[]> {
   if (Platform.OS === 'web') return [];
-  const { hour, minute } = parseTimeStr(resolveReminderTimes(profile).defaultTime);
+  const { hour, minute } = parseTimeStr(task.reminderTime ?? resolveReminderTimes(profile).defaultTime);
   const dueDate = new Date(task.nextDueDate + 'T12:00:00');
   dueDate.setHours(hour, minute, 0, 0);
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity, Platform, Modal, KeyboardAvoidingView,
 } from 'react-native';
@@ -28,6 +28,7 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [reminderTimes, setReminderTimes] = useState<ReminderTimesConfig>(DEFAULT_REMINDER_TIMES);
   const [activeTimePicker, setActiveTimePicker] = useState<keyof ReminderTimesConfig | null>(null);
+  const pendingReminderRef = useRef<{ key: keyof ReminderTimesConfig; value: string } | null>(null);
   const [mockTime, setMockTime] = useState<Date | null>(getMockTime);
   const [showMockPicker, setShowMockPicker] = useState(false);
   const [mockDateText, setMockDateText] = useState('');
@@ -126,11 +127,19 @@ export default function ProfileScreen() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const handleReminderTimeChange = async (key: keyof ReminderTimesConfig, date: Date) => {
+  const handleReminderTimeChange = (key: keyof ReminderTimesConfig, date: Date) => {
     const newTime = format(date, 'HH:mm');
-    const updated = { ...reminderTimes, [key]: newTime };
-    setReminderTimes(updated);
-    const updatedProfile = { ...profile, reminderTimes: updated };
+    pendingReminderRef.current = { key, value: newTime };
+    setReminderTimes(prev => ({ ...prev, [key]: newTime }));
+  };
+
+  const handleReminderTimeClose = async () => {
+    const pending = pendingReminderRef.current;
+    const updatedTimes = pending
+      ? { ...reminderTimes, [pending.key]: pending.value }
+      : reminderTimes;
+    pendingReminderRef.current = null;
+    const updatedProfile = { ...profile, reminderTimes: updatedTimes };
     setProfile(updatedProfile);
     await saveUserProfile(updatedProfile);
     setActiveTimePicker(null);
@@ -246,7 +255,7 @@ export default function ProfileScreen() {
                     value={displayDate}
                     mode="time"
                     onChange={(d) => handleReminderTimeChange(key, d)}
-                    onClose={() => setActiveTimePicker(null)}
+                    onClose={handleReminderTimeClose}
                   />
                 )}
               </React.Fragment>

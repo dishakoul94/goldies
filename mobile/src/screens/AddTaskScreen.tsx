@@ -9,7 +9,7 @@ import * as Haptics from 'expo-haptics';
 import DateTimePickerCompat from '../components/DateTimePickerCompat';
 import ServiceProviderPicker, { ProviderSelection } from '../components/ServiceProviderPicker';
 import { format } from 'date-fns';
-import { RootStackParamList, TaskKind, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider } from '../types';
+import { RootStackParamList, TaskKind, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider, UserProfile, DEFAULT_REMINDER_TIMES } from '../types';
 import { addTask, addServiceProvider, getServiceProviderById, loadUserProfile } from '../storage';
 import {
   scheduleExternalTaskNotifications,
@@ -35,6 +35,13 @@ export default function AddTaskScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteParams>();
   const kind = route.params.kind;
+  const [defaultReminderTime, setDefaultReminderTime] = useState(DEFAULT_REMINDER_TIMES.defaultTime);
+
+  useEffect(() => {
+    loadUserProfile().then(p => {
+      if (p?.reminderTimes?.defaultTime) setDefaultReminderTime(p.reminderTimes.defaultTime);
+    });
+  }, []);
 
   return (
     <View style={styles.safe}>
@@ -43,8 +50,8 @@ export default function AddTaskScreen() {
           {kind === 'external' ? '📅 New Appointment' : kind === 'internal' ? '✅ New To-Do' : '🔁 New Daily Task'}
         </Text>
 
-        {kind === 'external' && <ExternalForm navigation={navigation} />}
-        {kind === 'internal' && <InternalForm navigation={navigation} />}
+        {kind === 'external' && <ExternalForm navigation={navigation} defaultReminderTime={defaultReminderTime} />}
+        {kind === 'internal' && <InternalForm navigation={navigation} defaultReminderTime={defaultReminderTime} />}
         {kind === 'interday' && <InterdayForm navigation={navigation} />}
       </ScrollView>
     </View>
@@ -60,7 +67,7 @@ function buildAutoTitle(name: string, specialty?: string): string {
     : `Meeting with ${name}`;
 }
 
-function ExternalForm({ navigation }: { navigation: any }) {
+function ExternalForm({ navigation, defaultReminderTime }: { navigation: any; defaultReminderTime: string }) {
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [dateTime, setDateTime] = useState(new Date());
@@ -71,6 +78,11 @@ function ExternalForm({ navigation }: { navigation: any }) {
   const [recurUnit, setRecurUnit] = useState<RecurrenceUnit>('weeks');
   const [earlyReminderDays, setEarlyReminderDays] = useState<number[]>([]);
   const [dayOfReminder, setDayOfReminder] = useState(true);
+  const [reminderTimeValue, setReminderTimeValue] = useState(() => {
+    const [h, m] = defaultReminderTime.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m, 0, 0); return d;
+  });
+  const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
   const [providerSelection, setProviderSelection] = useState<ProviderSelection>({ type: 'none' });
   const [saving, setSaving] = useState(false);
 
@@ -117,6 +129,7 @@ function ExternalForm({ navigation }: { navigation: any }) {
         recurrence,
         earlyReminderDays,
         dayOfReminder,
+        reminderTime: format(reminderTimeValue, 'HH:mm'),
         serviceProviderId,
         notificationIds: [],
         createdAt: new Date().toISOString(),
@@ -247,6 +260,21 @@ function ExternalForm({ navigation }: { navigation: any }) {
         </View>
       </FormField>
 
+      <FormField label="Reminder notification time">
+        <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowReminderTimePicker(true)}>
+          <Ionicons name="alarm-outline" size={22} color={COLORS.PRIMARY} />
+          <Text style={styles.pickerBtnText}>{format(reminderTimeValue, 'h:mm a')}</Text>
+        </TouchableOpacity>
+        {showReminderTimePicker && (
+          <DateTimePickerCompat
+            value={reminderTimeValue}
+            mode="time"
+            onChange={(d) => setReminderTimeValue(d)}
+            onClose={() => setShowReminderTimePicker(false)}
+          />
+        )}
+      </FormField>
+
       <FormField label="Notes (optional)">
         <TextInput
           style={[styles.input, styles.notesInput]}
@@ -266,12 +294,17 @@ function ExternalForm({ navigation }: { navigation: any }) {
 
 // ─── Internal Form ────────────────────────────────────────────────────────────
 
-function InternalForm({ navigation }: { navigation: any }) {
+function InternalForm({ navigation, defaultReminderTime }: { navigation: any; defaultReminderTime: string }) {
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [dueDate, setDueDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [intervalDays, setIntervalDays] = useState(7);
+  const [reminderTimeValue, setReminderTimeValue] = useState(() => {
+    const [h, m] = defaultReminderTime.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m, 0, 0); return d;
+  });
+  const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const INTERVAL_OPTIONS = [0, 1, 3, 7, 14, 30];
@@ -287,6 +320,7 @@ function InternalForm({ navigation }: { navigation: any }) {
         notes: notes.trim() || undefined,
         nextDueDate: format(dueDate, 'yyyy-MM-dd'),
         intervalDays,
+        reminderTime: format(reminderTimeValue, 'HH:mm'),
         notificationIds: [],
         createdAt: new Date().toISOString(),
       };
@@ -345,6 +379,21 @@ function InternalForm({ navigation }: { navigation: any }) {
             </TouchableOpacity>
           ))}
         </View>
+      </FormField>
+
+      <FormField label="Reminder notification time">
+        <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowReminderTimePicker(true)}>
+          <Ionicons name="alarm-outline" size={22} color={COLORS.PRIMARY} />
+          <Text style={styles.pickerBtnText}>{format(reminderTimeValue, 'h:mm a')}</Text>
+        </TouchableOpacity>
+        {showReminderTimePicker && (
+          <DateTimePickerCompat
+            value={reminderTimeValue}
+            mode="time"
+            onChange={(d) => setReminderTimeValue(d)}
+            onClose={() => setShowReminderTimePicker(false)}
+          />
+        )}
       </FormField>
 
       <FormField label="Notes (optional)">

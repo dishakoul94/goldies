@@ -51,6 +51,7 @@ export interface ExternalTask {
   recurrence?: Recurrence;
   earlyReminderDays: number[];  // empty = no early reminder; each value = days before
   dayOfReminder: boolean;
+  reminderTime?: string;      // "HH:mm" override; falls back to profile defaultTime
   serviceProviderId?: string;
   notificationIds: string[];
   createdAt: string;
@@ -64,6 +65,7 @@ export interface InternalTask {
   notes?: string;
   nextDueDate: string;        // ISO date (YYYY-MM-DD)
   intervalDays: number;       // 0 = one-time
+  reminderTime?: string;      // "HH:mm" override; falls back to profile defaultTime
   notificationIds: string[];
   createdAt: string;
   completedAt?: string;

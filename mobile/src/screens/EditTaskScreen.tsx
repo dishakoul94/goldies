@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import DateTimePickerCompat from '../components/DateTimePickerCompat';
 import { format, parseISO } from 'date-fns';
-import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider } from '../types';
+import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider, DEFAULT_REMINDER_TIMES } from '../types';
 import { getTaskById, updateTask, addServiceProvider, loadUserProfile } from '../storage';
 import ServiceProviderPicker, { ProviderSelection } from '../components/ServiceProviderPicker';
 import { cancelNotifications, scheduleExternalTaskNotifications, scheduleInternalTaskNotification, scheduleInterdayTaskNotifications } from '../notifications';
@@ -29,11 +29,15 @@ export default function EditTaskScreen() {
   const route = useRoute<RouteParams>();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+  const [defaultReminderTime, setDefaultReminderTime] = useState(DEFAULT_REMINDER_TIMES.defaultTime);
 
   useEffect(() => {
     getTaskById(route.params.taskId).then(t => {
       setTask(t);
       setLoading(false);
+    });
+    loadUserProfile().then(p => {
+      if (p?.reminderTimes?.defaultTime) setDefaultReminderTime(p.reminderTimes.defaultTime);
     });
   }, [route.params.taskId]);
 
@@ -61,8 +65,8 @@ export default function EditTaskScreen() {
             {task.kind === 'external' ? '📅 Edit Appointment' : task.kind === 'internal' ? '✅ Edit To-Do' : '🔁 Edit Daily Task'}
           </Text>
 
-          {task.kind === 'external' && <ExternalEditForm task={task} navigation={navigation} />}
-          {task.kind === 'internal' && <InternalEditForm task={task} navigation={navigation} />}
+          {task.kind === 'external' && <ExternalEditForm task={task} navigation={navigation} defaultReminderTime={defaultReminderTime} />}
+          {task.kind === 'internal' && <InternalEditForm task={task} navigation={navigation} defaultReminderTime={defaultReminderTime} />}
           {task.kind === 'interday' && <InterdayEditForm task={task} navigation={navigation} />}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -74,7 +78,7 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation: any }) {
+function ExternalEditForm({ task, navigation, defaultReminderTime }: { task: ExternalTask; navigation: any; defaultReminderTime: string }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? '');
   const [dateTime, setDateTime] = useState(parseISO(task.dateTime));
@@ -89,6 +93,12 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
       : (task.earlyReminderDays as unknown as number) > 0 ? [task.earlyReminderDays as unknown as number] : [],
   );
   const [dayOfReminder, setDayOfReminder] = useState(task.dayOfReminder);
+  const [reminderTimeValue, setReminderTimeValue] = useState(() => {
+    const hhmm = task.reminderTime ?? defaultReminderTime;
+    const [h, m] = hhmm.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m, 0, 0); return d;
+  });
+  const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
   const [providerSelection, setProviderSelection] = useState<ProviderSelection>(
     task.serviceProviderId
       ? { type: 'existing', providerId: task.serviceProviderId }
@@ -128,6 +138,7 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
         recurrence,
         earlyReminderDays,
         dayOfReminder,
+        reminderTime: format(reminderTimeValue, 'HH:mm'),
         serviceProviderId,
         notificationIds: [],
       };
@@ -215,6 +226,17 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
           <Text style={styles.toggleLabel}>{dayOfReminder ? 'Yes' : 'No'}</Text>
         </View>
       </FormField>
+      <FormField label="Reminder notification time">
+        <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowReminderTimePicker(true)}>
+          <Ionicons name="alarm-outline" size={22} color={COLORS.PRIMARY} />
+          <Text style={styles.pickerBtnText}>{format(reminderTimeValue, 'h:mm a')}</Text>
+        </TouchableOpacity>
+        {showReminderTimePicker && (
+          <DateTimePickerCompat value={reminderTimeValue} mode="time"
+            onChange={(d) => setReminderTimeValue(d)}
+            onClose={() => setShowReminderTimePicker(false)} />
+        )}
+      </FormField>
       <FormField label="Notes (optional)">
         <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />
       </FormField>
@@ -223,12 +245,18 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
   );
 }
 
-function InternalEditForm({ task, navigation }: { task: InternalTask; navigation: any }) {
+function InternalEditForm({ task, navigation, defaultReminderTime }: { task: InternalTask; navigation: any; defaultReminderTime: string }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? '');
   const [dueDate, setDueDate] = useState(parseISO(task.nextDueDate));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [intervalDays, setIntervalDays] = useState(task.intervalDays);
+  const [reminderTimeValue, setReminderTimeValue] = useState(() => {
+    const hhmm = task.reminderTime ?? defaultReminderTime;
+    const [h, m] = hhmm.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m, 0, 0); return d;
+  });
+  const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -238,7 +266,8 @@ function InternalEditForm({ task, navigation }: { task: InternalTask; navigation
       await cancelNotifications(task.notificationIds);
       const updated: InternalTask = {
         ...task, title: title.trim(), notes: notes.trim() || undefined,
-        nextDueDate: format(dueDate, 'yyyy-MM-dd'), intervalDays, notificationIds: [],
+        nextDueDate: format(dueDate, 'yyyy-MM-dd'), intervalDays,
+        reminderTime: format(reminderTimeValue, 'HH:mm'), notificationIds: [],
       };
       const profile = await loadUserProfile();
       const ids = await scheduleInternalTaskNotification(updated, profile);
@@ -274,6 +303,17 @@ function InternalEditForm({ task, navigation }: { task: InternalTask; navigation
             </TouchableOpacity>
           ))}
         </View>
+      </FormField>
+      <FormField label="Reminder notification time">
+        <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowReminderTimePicker(true)}>
+          <Ionicons name="alarm-outline" size={22} color={COLORS.PRIMARY} />
+          <Text style={styles.pickerBtnText}>{format(reminderTimeValue, 'h:mm a')}</Text>
+        </TouchableOpacity>
+        {showReminderTimePicker && (
+          <DateTimePickerCompat value={reminderTimeValue} mode="time"
+            onChange={(d) => setReminderTimeValue(d)}
+            onClose={() => setShowReminderTimePicker(false)} />
+        )}
       </FormField>
       <FormField label="Notes (optional)">
         <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />

@@ -167,8 +167,8 @@ export default function DateTimePickerCompat({ value, mode, onChange, onClose, m
       display={display ?? 'default'}
       minimumDate={minimumDate}
       onChange={(_e: DateTimePickerEvent, d?: Date) => {
-        onClose?.();
         if (d) onChange(d);
+        onClose?.();
       }}
     />
   );
