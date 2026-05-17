@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics';
 import DateTimePickerCompat from '../components/DateTimePickerCompat';
 import { format, parseISO } from 'date-fns';
 import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider } from '../types';
-import { getTaskById, updateTask, addServiceProvider } from '../storage';
+import { getTaskById, updateTask, addServiceProvider, loadUserProfile } from '../storage';
 import ServiceProviderPicker, { ProviderSelection } from '../components/ServiceProviderPicker';
 import { cancelNotifications, scheduleExternalTaskNotifications, scheduleInternalTaskNotification, scheduleInterdayTaskNotifications } from '../notifications';
 import { COLORS, FONT, SPACING, RADIUS } from '../utils/theme';
@@ -131,7 +131,8 @@ function ExternalEditForm({ task, navigation }: { task: ExternalTask; navigation
         serviceProviderId,
         notificationIds: [],
       };
-      const ids = await scheduleExternalTaskNotifications(updated);
+      const profile = await loadUserProfile();
+      const ids = await scheduleExternalTaskNotifications(updated, profile);
       await updateTask({ ...updated, notificationIds: ids });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
@@ -239,7 +240,8 @@ function InternalEditForm({ task, navigation }: { task: InternalTask; navigation
         ...task, title: title.trim(), notes: notes.trim() || undefined,
         nextDueDate: format(dueDate, 'yyyy-MM-dd'), intervalDays, notificationIds: [],
       };
-      const ids = await scheduleInternalTaskNotification(updated);
+      const profile = await loadUserProfile();
+      const ids = await scheduleInternalTaskNotification(updated, profile);
       await updateTask({ ...updated, notificationIds: ids });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
@@ -305,7 +307,8 @@ function InterdayEditForm({ task, navigation }: { task: InterdayTask; navigation
         timeSlot: hasTime ? format(timeValue, 'HH:mm') : undefined,
         group, activeDays, canDefer, notificationIds: [],
       };
-      const ids = await scheduleInterdayTaskNotifications(updated);
+      const profile = await loadUserProfile();
+      const ids = await scheduleInterdayTaskNotifications(updated, profile);
       await updateTask({ ...updated, notificationIds: ids });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();

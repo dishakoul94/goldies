@@ -3,8 +3,17 @@ import { Platform } from 'react-native';
 import {
   addDays, addWeeks, addMonths, parseISO, subDays, isBefore, format,
 } from 'date-fns';
-import { ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence } from './types';
+import { ExternalTask, InternalTask, InterdayTask, Recurrence, UserProfile, ReminderTimesConfig, DEFAULT_REMINDER_TIMES } from './types';
 import { getNow } from './utils/mockTime';
+
+function resolveReminderTimes(profile?: UserProfile | null): ReminderTimesConfig {
+  return { ...DEFAULT_REMINDER_TIMES, ...profile?.reminderTimes };
+}
+
+function parseTimeStr(hhmm: string): { hour: number; minute: number } {
+  const [hour, minute] = hhmm.split(':').map(Number);
+  return { hour, minute };
+}
 
 export async function setupNotifications(): Promise<boolean> {
   Notifications.setNotificationHandler({
@@ -55,10 +64,11 @@ function computeOccurrences(startISO: string, recurrence: Recurrence, count: num
   return dates;
 }
 
-export async function scheduleExternalTaskNotifications(task: ExternalTask): Promise<string[]> {
+export async function scheduleExternalTaskNotifications(task: ExternalTask, profile?: UserProfile | null): Promise<string[]> {
   if (Platform.OS === 'web') return [];
   const ids: string[] = [];
   const now = getNow();
+  const { hour: remHour, minute: remMinute } = parseTimeStr(resolveReminderTimes(profile).defaultTime);
 
   const occurrences = task.recurrence
     ? computeOccurrences(task.dateTime, task.recurrence, 4)
@@ -72,7 +82,7 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask): Pro
       : (task.earlyReminderDays as unknown as number) > 0 ? [task.earlyReminderDays as unknown as number] : [];
     for (const days of reminderDays) {
       const earlyDate = subDays(occ, days);
-      earlyDate.setHours(9, 0, 0, 0);
+      earlyDate.setHours(remHour, remMinute, 0, 0);
       if (!isBefore(earlyDate, now)) {
         const id = await Notifications.scheduleNotificationAsync({
           content: {
@@ -89,7 +99,7 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask): Pro
 
     if (task.dayOfReminder) {
       const dayOf = new Date(occ);
-      if (dayOf.getHours() < 9) dayOf.setHours(9, 0, 0, 0);
+      dayOf.setHours(remHour, remMinute, 0, 0);
       if (!isBefore(dayOf, now)) {
         const timeStr = format(occ, 'h:mm a');
         const id = await Notifications.scheduleNotificationAsync({
@@ -110,10 +120,11 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask): Pro
 
 // ─── Internal Task ───────────────────────────────────────────────────────────
 
-export async function scheduleInternalTaskNotification(task: InternalTask): Promise<string[]> {
+export async function scheduleInternalTaskNotification(task: InternalTask, profile?: UserProfile | null): Promise<string[]> {
   if (Platform.OS === 'web') return [];
+  const { hour, minute } = parseTimeStr(resolveReminderTimes(profile).defaultTime);
   const dueDate = new Date(task.nextDueDate + 'T12:00:00');
-  dueDate.setHours(9, 0, 0, 0);
+  dueDate.setHours(hour, minute, 0, 0);
 
   const id = await Notifications.scheduleNotificationAsync({
     content: { title: 'Reminder', body: task.title, sound: true, data: { taskId: task.id } },
@@ -124,20 +135,19 @@ export async function scheduleInternalTaskNotification(task: InternalTask): Prom
 
 // ─── Interday Task ───────────────────────────────────────────────────────────
 
-const GROUP_HOURS: Record<InterdayGroup, number> = {
-  morning: 8,
-  afternoon: 14,
-  evening: 19,
-  none: 9,
-};
-
-export async function scheduleInterdayTaskNotifications(task: InterdayTask): Promise<string[]> {
+export async function scheduleInterdayTaskNotifications(task: InterdayTask, profile?: UserProfile | null): Promise<string[]> {
   if (Platform.OS === 'web') return [];
   const ids: string[] = [];
+  const times = resolveReminderTimes(profile);
 
-  const [hour, minute] = task.timeSlot
-    ? task.timeSlot.split(':').map(Number)
-    : [GROUP_HOURS[task.group], 0];
+  let hour: number;
+  let minute: number;
+  if (task.timeSlot) {
+    [hour, minute] = task.timeSlot.split(':').map(Number);
+  } else {
+    const groupKey = `${task.group}Time` as keyof typeof times;
+    ({ hour, minute } = parseTimeStr(times[groupKey]));
+  }
 
   const days = task.activeDays.length > 0 ? task.activeDays : [0, 1, 2, 3, 4, 5, 6];
 

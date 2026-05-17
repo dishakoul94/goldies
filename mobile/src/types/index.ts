@@ -2,11 +2,28 @@ export type TaskKind = 'external' | 'internal' | 'interday';
 export type RecurrenceUnit = 'days' | 'weeks' | 'months';
 export type InterdayGroup = 'morning' | 'afternoon' | 'evening' | 'none';
 
+export interface ReminderTimesConfig {
+  defaultTime: string;    // External early/day-of + Internal reminders
+  morningTime: string;    // Interday morning group
+  afternoonTime: string;  // Interday afternoon group
+  eveningTime: string;    // Interday evening group
+  noneTime: string;       // Interday none group
+}
+
+export const DEFAULT_REMINDER_TIMES: ReminderTimesConfig = {
+  defaultTime: '09:00',
+  morningTime: '08:00',
+  afternoonTime: '14:00',
+  eveningTime: '19:00',
+  noneTime: '09:00',
+};
+
 export interface UserProfile {
   firstName: string;
   lastName: string;
   dateOfBirth?: string; // YYYY-MM-DD
   email?: string;
+  reminderTimes?: ReminderTimesConfig;
 }
 
 export interface ServiceProvider {

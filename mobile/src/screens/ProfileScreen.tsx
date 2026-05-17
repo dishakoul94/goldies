@@ -8,7 +8,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { format } from 'date-fns';
-import { RootStackParamList, UserProfile, ServiceProvider } from '../types';
+import DateTimePickerCompat from '../components/DateTimePickerCompat';
+import { RootStackParamList, UserProfile, ServiceProvider, ReminderTimesConfig, DEFAULT_REMINDER_TIMES } from '../types';
 import {
   loadUserProfile, saveUserProfile, loadServiceProviders, deleteServiceProvider,
 } from '../storage';
@@ -25,6 +26,8 @@ export default function ProfileScreen() {
   const [draft, setDraft] = useState<UserProfile>({ firstName: '', lastName: '' });
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
   const [saving, setSaving] = useState(false);
+  const [reminderTimes, setReminderTimes] = useState<ReminderTimesConfig>(DEFAULT_REMINDER_TIMES);
+  const [activeTimePicker, setActiveTimePicker] = useState<keyof ReminderTimesConfig | null>(null);
   const [mockTime, setMockTime] = useState<Date | null>(getMockTime);
   const [showMockPicker, setShowMockPicker] = useState(false);
   const [mockDateText, setMockDateText] = useState('');
@@ -32,7 +35,11 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       loadUserProfile().then(p => {
-        if (p) { setProfile(p); setDraft(p); }
+        if (p) {
+          setProfile(p);
+          setDraft(p);
+          setReminderTimes({ ...DEFAULT_REMINDER_TIMES, ...p.reminderTimes });
+        }
       });
       loadServiceProviders().then(setProviders);
       setMockTime(getMockTime());
@@ -59,6 +66,7 @@ export default function ProfileScreen() {
       const updated: UserProfile = {
         firstName: draft.firstName.trim(),
         lastName: draft.lastName.trim(),
+        reminderTimes: profile.reminderTimes,
       };
       await saveUserProfile(updated);
       setProfile(updated);
@@ -115,6 +123,17 @@ export default function ProfileScreen() {
     await saveMockTime(null);
     setMockTime(null);
     setShowMockPicker(false);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleReminderTimeChange = async (key: keyof ReminderTimesConfig, date: Date) => {
+    const newTime = format(date, 'HH:mm');
+    const updated = { ...reminderTimes, [key]: newTime };
+    setReminderTimes(updated);
+    const updatedProfile = { ...profile, reminderTimes: updated };
+    setProfile(updatedProfile);
+    await saveUserProfile(updatedProfile);
+    setActiveTimePicker(null);
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
@@ -187,6 +206,52 @@ export default function ProfileScreen() {
               />
             </>
           )}
+        </View>
+
+        {/* ── Reminder Times ── */}
+        <View style={[styles.sectionHeader, { marginTop: SPACING.LG }]}>
+          <Text style={styles.sectionTitle}>Reminder Times</Text>
+        </View>
+
+        <View style={styles.card}>
+          {(
+            [
+              { key: 'defaultTime' as const, label: 'Appointments & to-dos' },
+              { key: 'morningTime' as const, label: 'Morning reminders' },
+              { key: 'afternoonTime' as const, label: 'Afternoon reminders' },
+              { key: 'eveningTime' as const, label: 'Evening reminders' },
+              { key: 'noneTime' as const, label: 'Unscheduled reminders' },
+            ] as { key: keyof ReminderTimesConfig; label: string }[]
+          ).map(({ key, label }, idx, arr) => {
+            const hhmm = reminderTimes[key];
+            const [h, m] = hhmm.split(':').map(Number);
+            const displayDate = new Date();
+            displayDate.setHours(h, m, 0, 0);
+            const isLast = idx === arr.length - 1;
+            return (
+              <React.Fragment key={key}>
+                <TouchableOpacity
+                  style={[styles.profileRow, !isLast && styles.profileRowBorder]}
+                  onPress={() => setActiveTimePicker(key)}
+                >
+                  <Ionicons name="alarm-outline" size={20} color={COLORS.PRIMARY} style={styles.profileRowIcon} />
+                  <View style={styles.profileRowText}>
+                    <Text style={styles.profileRowLabel}>{label}</Text>
+                    <Text style={styles.profileRowValue}>{format(displayDate, 'h:mm a')}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.TEXT_MUTED} />
+                </TouchableOpacity>
+                {activeTimePicker === key && (
+                  <DateTimePickerCompat
+                    value={displayDate}
+                    mode="time"
+                    onChange={(d) => handleReminderTimeChange(key, d)}
+                    onClose={() => setActiveTimePicker(null)}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
         </View>
 
         {/* ── Service Providers ── */}
