@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Platform, Modal, View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,25 +16,31 @@ interface Props {
 
 export default function DateTimePickerCompat({ value, mode, onChange, onClose, minimumDate, display }: Props) {
   const insets = useSafeAreaInsets();
+  const [localValue, setLocalValue] = useState(value);
 
   if (Platform.OS === 'ios') {
+    const handleDone = () => {
+      onChange(localValue);
+      onClose?.();
+    };
+
     return (
-      <Modal transparent animationType="slide" visible onRequestClose={onClose}>
+      <Modal transparent animationType="slide" visible onRequestClose={handleDone}>
         <View style={[styles.overlay, { paddingTop: Math.max(insets.top + 40, 100) }]}>
           <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <View style={styles.toolbar}>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <TouchableOpacity onPress={handleDone} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Text style={styles.doneBtn}>Done</Text>
               </TouchableOpacity>
             </View>
             <DateTimePicker
-              value={value}
+              value={localValue}
               mode={mode}
               display={display ?? 'spinner'}
               minimumDate={minimumDate}
               style={styles.picker}
               onChange={(_e: DateTimePickerEvent, d?: Date) => {
-                if (d) onChange(d);
+                if (d) setLocalValue(d);
               }}
             />
           </View>
