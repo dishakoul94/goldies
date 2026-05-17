@@ -14,32 +14,123 @@ interface Props {
   display?: DisplayMode;
 }
 
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+const DAY_NAMES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+function JsCalendarPicker({ value, minimumDate, onSelect, onCancel }: {
+  value: Date;
+  minimumDate?: Date;
+  onSelect: (date: Date) => void;
+  onCancel: () => void;
+}) {
+  const [viewYear, setViewYear] = useState(value.getFullYear());
+  const [viewMonth, setViewMonth] = useState(value.getMonth());
+
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+  const today = new Date();
+  const minDay = minimumDate
+    ? new Date(minimumDate.getFullYear(), minimumDate.getMonth(), minimumDate.getDate())
+    : null;
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
+
+  const isSelected = (d: number) =>
+    value.getFullYear() === viewYear && value.getMonth() === viewMonth && value.getDate() === d;
+  const isToday = (d: number) =>
+    today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === d;
+  const isDisabled = (d: number) => {
+    if (!minDay) return false;
+    return new Date(viewYear, viewMonth, d) < minDay;
+  };
+
+  const cells: (number | null)[] = Array(firstDayOfWeek).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  const rows: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+
+  return (
+    <View style={cal.wrapper}>
+      <View style={cal.header}>
+        <Text style={cal.monthYear}>{MONTH_NAMES[viewMonth]} {viewYear}</Text>
+        <View style={cal.navRow}>
+          <TouchableOpacity onPress={prevMonth} style={cal.navBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={cal.navArrow}>{'<'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={nextMonth} style={cal.navBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={cal.navArrow}>{'>'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={cal.dayLabelsRow}>
+        {DAY_NAMES.map(n => <Text key={n} style={cal.dayLabel}>{n}</Text>)}
+      </View>
+
+      {rows.map((row, ri) => (
+        <View key={ri} style={cal.row}>
+          {row.map((day, ci) => {
+            if (!day) return <View key={ci} style={cal.cell} />;
+            const sel = isSelected(day);
+            const tod = isToday(day);
+            const dis = isDisabled(day);
+            return (
+              <TouchableOpacity
+                key={ci}
+                style={[cal.cell, sel && cal.selectedCell]}
+                onPress={() => {
+                  const picked = new Date(viewYear, viewMonth, day);
+                  onSelect(picked);
+                }}
+                disabled={dis}
+                activeOpacity={0.7}
+              >
+                <Text style={[
+                  cal.dayText,
+                  tod && !sel && cal.todayText,
+                  sel && cal.selectedText,
+                  dis && cal.disabledText,
+                ]}>
+                  {day}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ))}
+
+      <View style={cal.footer}>
+        <TouchableOpacity onPress={onCancel} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}>
+          <Text style={cal.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 export default function DateTimePickerCompat({ value, mode, onChange, onClose, minimumDate, display }: Props) {
   const insets = useSafeAreaInsets();
   const [localValue, setLocalValue] = useState(value);
 
   if (Platform.OS === 'ios') {
-    // Date mode: render inline calendar directly in the form (no Modal).
-    // Modal blocks onChange on iOS — rendering inline fixes it.
     if (mode === 'date') {
       return (
-        <View style={styles.inlineWrapper}>
-          <View style={styles.toolbar}>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <Text style={styles.cancelBtn}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-          <DateTimePicker
-            value={value}
-            mode="date"
-            display={display ?? 'inline'}
-            minimumDate={minimumDate}
-            style={styles.inlinePicker}
-            onChange={(_e: DateTimePickerEvent, d?: Date) => {
-              if (d) { onChange(d); onClose?.(); }
-            }}
-          />
-        </View>
+        <JsCalendarPicker
+          value={value}
+          minimumDate={minimumDate}
+          onSelect={(d) => { onChange(d); onClose?.(); }}
+          onCancel={() => onClose?.()}
+        />
       );
     }
 
@@ -47,7 +138,7 @@ export default function DateTimePickerCompat({ value, mode, onChange, onClose, m
     const handleDone = () => { onChange(localValue); onClose?.(); };
     return (
       <Modal transparent animationType="slide" visible onRequestClose={handleDone}>
-        <View style={[styles.overlay, { paddingTop: Math.max(insets.top + 40, 100) }]}>
+        <View style={styles.overlay}>
           <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <View style={styles.toolbar}>
               <TouchableOpacity onPress={handleDone} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
@@ -58,7 +149,6 @@ export default function DateTimePickerCompat({ value, mode, onChange, onClose, m
               value={localValue}
               mode="time"
               display={display ?? 'spinner'}
-              minimumDate={minimumDate}
               style={styles.picker}
               onChange={(_e: DateTimePickerEvent, d?: Date) => {
                 if (d) setLocalValue(d);
@@ -108,20 +198,97 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#007AFF',
   },
-  cancelBtn: {
-    fontSize: 17,
-    color: '#8E8E93',
-  },
   picker: {
     height: 216,
   },
-  inlineWrapper: {
+});
+
+const BLUE = '#007AFF';
+const cal = StyleSheet.create({
+  wrapper: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     marginTop: 8,
+    paddingHorizontal: 8,
+    paddingBottom: 4,
     overflow: 'hidden',
   },
-  inlinePicker: {
-    height: 346,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  monthYear: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#000',
+  },
+  navRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  navBtn: {
+    padding: 4,
+  },
+  navArrow: {
+    fontSize: 20,
+    color: BLUE,
+    fontWeight: '600',
+  },
+  dayLabelsRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  dayLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#8E8E93',
+    paddingVertical: 4,
+  },
+  row: {
+    flexDirection: 'row',
+  },
+  cell: {
+    flex: 1,
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 1,
+  },
+  selectedCell: {
+    backgroundColor: BLUE,
+    borderRadius: 999,
+  },
+  dayText: {
+    fontSize: 17,
+    color: '#000',
+  },
+  todayText: {
+    color: BLUE,
+    fontWeight: '600',
+  },
+  selectedText: {
+    color: '#FFF',
+    fontWeight: '600',
+  },
+  disabledText: {
+    color: '#C7C7CC',
+  },
+  footer: {
+    alignItems: 'flex-end',
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E0E0E0',
+    marginTop: 4,
+  },
+  cancelText: {
+    fontSize: 16,
+    color: '#8E8E93',
   },
 });
