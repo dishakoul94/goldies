@@ -65,6 +65,7 @@ export interface InternalTask {
   notes?: string;
   nextDueDate: string;        // ISO date (YYYY-MM-DD)
   intervalDays: number;       // 0 = one-time
+  earlyReminderDays?: number[];  // days before nextDueDate to send an early notification
   reminderTime?: string;      // "HH:mm" override; falls back to profile defaultTime
   notificationIds: string[];
   createdAt: string;

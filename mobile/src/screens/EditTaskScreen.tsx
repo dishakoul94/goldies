@@ -251,6 +251,7 @@ function InternalEditForm({ task, navigation, defaultReminderTime }: { task: Int
   const [dueDate, setDueDate] = useState(parseISO(task.nextDueDate));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [intervalDays, setIntervalDays] = useState(task.intervalDays);
+  const [earlyReminderDays, setEarlyReminderDays] = useState<number[]>(task.earlyReminderDays ?? []);
   const [reminderTimeValue, setReminderTimeValue] = useState(() => {
     const hhmm = task.reminderTime ?? defaultReminderTime;
     const [h, m] = hhmm.split(':').map(Number);
@@ -266,7 +267,7 @@ function InternalEditForm({ task, navigation, defaultReminderTime }: { task: Int
       await cancelNotifications(task.notificationIds);
       const updated: InternalTask = {
         ...task, title: title.trim(), notes: notes.trim() || undefined,
-        nextDueDate: format(dueDate, 'yyyy-MM-dd'), intervalDays,
+        nextDueDate: format(dueDate, 'yyyy-MM-dd'), intervalDays, earlyReminderDays,
         reminderTime: format(reminderTimeValue, 'HH:mm'), notificationIds: [],
       };
       const profile = await loadUserProfile();
@@ -302,6 +303,23 @@ function InternalEditForm({ task, navigation, defaultReminderTime }: { task: Int
               <Text style={[styles.chipLabel, intervalDays === n && styles.chipLabelActive]}>{n === 0 ? 'Once' : `${n}d`}</Text>
             </TouchableOpacity>
           ))}
+        </View>
+      </FormField>
+      <FormField label="Early reminder">
+        <View style={styles.chipRow}>
+          {EARLY_REMINDER_OPTIONS.map(n => {
+            const isNone = n === 0;
+            const active = isNone ? earlyReminderDays.length === 0 : earlyReminderDays.includes(n);
+            const toggle = () => {
+              if (isNone) { setEarlyReminderDays([]); return; }
+              setEarlyReminderDays(prev => prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n]);
+            };
+            return (
+              <TouchableOpacity key={n} style={[styles.chip, active && styles.chipActive]} onPress={toggle}>
+                <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{isNone ? 'None' : `${n}d`}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </FormField>
       <FormField label="Reminder notification time">

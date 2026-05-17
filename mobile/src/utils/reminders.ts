@@ -1,5 +1,5 @@
 import { addDays, addWeeks, addMonths, subDays, parseISO, isBefore, format } from 'date-fns';
-import { Task, ExternalTask, InterdayGroup, TaskKind } from '../types';
+import { Task, ExternalTask, InterdayGroup, TaskKind, DEFAULT_REMINDER_TIMES } from '../types';
 import { getNow } from './mockTime';
 
 export interface UpcomingReminder {
@@ -52,12 +52,14 @@ export function getUpcomingReminders(tasks: Task[], windowDays = 14): UpcomingRe
       for (const occ of occurrences) {
         if (isBefore(occ, now)) continue;
 
+        const [remH, remM] = (task.reminderTime ?? DEFAULT_REMINDER_TIMES.defaultTime).split(':').map(Number);
+
         const reminderDays = Array.isArray(task.earlyReminderDays)
           ? task.earlyReminderDays
           : (task.earlyReminderDays as unknown as number) > 0 ? [task.earlyReminderDays as unknown as number] : [];
         for (const days of reminderDays) {
           const earlyDate = subDays(occ, days);
-          earlyDate.setHours(9, 0, 0, 0);
+          earlyDate.setHours(remH, remM, 0, 0);
           const startOfEarlyDay = new Date(earlyDate);
           startOfEarlyDay.setHours(0, 0, 0, 0);
           const startOfToday = new Date(now);
@@ -76,7 +78,7 @@ export function getUpcomingReminders(tasks: Task[], windowDays = 14): UpcomingRe
 
         if (task.dayOfReminder) {
           const dayOf = new Date(occ);
-          if (dayOf.getHours() < 9) dayOf.setHours(9, 0, 0, 0);
+          dayOf.setHours(remH, remM, 0, 0);
           if (!isBefore(dayOf, now) && isBefore(dayOf, cutoff)) {
             reminders.push({
               key: `${task.id}_dayof_${occ.getTime()}`,
@@ -90,7 +92,31 @@ export function getUpcomingReminders(tasks: Task[], windowDays = 14): UpcomingRe
         }
       }
     } else if (task.kind === 'internal') {
-      const dueDate = new Date(task.nextDueDate + 'T09:00:00');
+      const [intH, intM] = (task.reminderTime ?? DEFAULT_REMINDER_TIMES.defaultTime).split(':').map(Number);
+      const dueDateAnchor = new Date(task.nextDueDate + 'T12:00:00');
+
+      const earlyDays = task.earlyReminderDays ?? [];
+      for (const days of earlyDays) {
+        const earlyDate = subDays(dueDateAnchor, days);
+        earlyDate.setHours(intH, intM, 0, 0);
+        const startOfEarlyDay = new Date(earlyDate);
+        startOfEarlyDay.setHours(0, 0, 0, 0);
+        const startOfToday = new Date(now);
+        startOfToday.setHours(0, 0, 0, 0);
+        if (!isBefore(startOfEarlyDay, startOfToday) && isBefore(earlyDate, cutoff)) {
+          reminders.push({
+            key: `${task.id}_early_${days}`,
+            taskId: task.id,
+            date: earlyDate,
+            title: 'Upcoming To-Do',
+            body: `"${task.title}" is due in ${days} day${days > 1 ? 's' : ''}.`,
+            kind: 'internal',
+          });
+        }
+      }
+
+      const dueDate = new Date(dueDateAnchor);
+      dueDate.setHours(intH, intM, 0, 0);
       if (!isBefore(dueDate, now) && isBefore(dueDate, cutoff)) {
         reminders.push({
           key: `${task.id}_due`,
