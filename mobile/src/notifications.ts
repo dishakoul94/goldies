@@ -122,15 +122,39 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask, prof
 
 export async function scheduleInternalTaskNotification(task: InternalTask, profile?: UserProfile | null): Promise<string[]> {
   if (Platform.OS === 'web') return [];
+  const ids: string[] = [];
+  const now = getNow();
   const { hour, minute } = parseTimeStr(task.reminderTime ?? resolveReminderTimes(profile).defaultTime);
-  const dueDate = new Date(task.nextDueDate + 'T12:00:00');
-  dueDate.setHours(hour, minute, 0, 0);
+  const dueDateAnchor = new Date(task.nextDueDate + 'T12:00:00');
 
-  const id = await Notifications.scheduleNotificationAsync({
-    content: { title: 'Reminder', body: task.title, sound: true, data: { taskId: task.id } },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: toFutureDate(dueDate) },
-  });
-  return [id];
+  for (const days of task.earlyReminderDays ?? []) {
+    const earlyDate = subDays(dueDateAnchor, days);
+    earlyDate.setHours(hour, minute, 0, 0);
+    if (!isBefore(earlyDate, now)) {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Upcoming To-Do',
+          body: `"${task.title}" is due in ${days} day${days > 1 ? 's' : ''}.`,
+          sound: true,
+          data: { taskId: task.id },
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: toFutureDate(earlyDate) },
+      });
+      ids.push(id);
+    }
+  }
+
+  const dueDate = new Date(dueDateAnchor);
+  dueDate.setHours(hour, minute, 0, 0);
+  if (!isBefore(dueDate, now)) {
+    const id = await Notifications.scheduleNotificationAsync({
+      content: { title: 'Reminder', body: task.title, sound: true, data: { taskId: task.id } },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: toFutureDate(dueDate) },
+    });
+    ids.push(id);
+  }
+
+  return ids;
 }
 
 // ─── Interday Task ───────────────────────────────────────────────────────────

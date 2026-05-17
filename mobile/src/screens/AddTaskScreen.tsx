@@ -300,6 +300,7 @@ function InternalForm({ navigation, defaultReminderTime }: { navigation: any; de
   const [dueDate, setDueDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [intervalDays, setIntervalDays] = useState(7);
+  const [earlyReminderDays, setEarlyReminderDays] = useState<number[]>([]);
   const [reminderTimeValue, setReminderTimeValue] = useState(() => {
     const [h, m] = defaultReminderTime.split(':').map(Number);
     const d = new Date(); d.setHours(h, m, 0, 0); return d;
@@ -320,6 +321,7 @@ function InternalForm({ navigation, defaultReminderTime }: { navigation: any; de
         notes: notes.trim() || undefined,
         nextDueDate: format(dueDate, 'yyyy-MM-dd'),
         intervalDays,
+        earlyReminderDays,
         reminderTime: format(reminderTimeValue, 'HH:mm'),
         notificationIds: [],
         createdAt: new Date().toISOString(),
@@ -378,6 +380,32 @@ function InternalForm({ navigation, defaultReminderTime }: { navigation: any; de
               </Text>
             </TouchableOpacity>
           ))}
+        </View>
+      </FormField>
+
+      <FormField label="Early reminder">
+        <View style={styles.chipRow}>
+          {EARLY_REMINDER_OPTIONS.map(n => {
+            const isNone = n === 0;
+            const active = isNone ? earlyReminderDays.length === 0 : earlyReminderDays.includes(n);
+            const toggle = () => {
+              if (isNone) { setEarlyReminderDays([]); return; }
+              setEarlyReminderDays(prev =>
+                prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n],
+              );
+            };
+            return (
+              <TouchableOpacity
+                key={n}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={toggle}
+              >
+                <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
+                  {isNone ? 'None' : `${n}d`}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </FormField>
 
