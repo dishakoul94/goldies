@@ -7,8 +7,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { format, parseISO } from 'date-fns';
-import DateTimePickerCompat from '../components/DateTimePickerCompat';
+import { format } from 'date-fns';
 import { RootStackParamList, UserProfile, ServiceProvider } from '../types';
 import {
   loadUserProfile, saveUserProfile, loadServiceProviders, deleteServiceProvider,
@@ -24,7 +23,6 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile>({ firstName: '', lastName: '' });
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<UserProfile>({ firstName: '', lastName: '' });
-  const [showDobPicker, setShowDobPicker] = useState(false);
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
   const [saving, setSaving] = useState(false);
   const [mockTime, setMockTime] = useState<Date | null>(getMockTime);
@@ -49,7 +47,6 @@ export default function ProfileScreen() {
   const cancelEdit = () => {
     setDraft(profile);
     setEditing(false);
-    setShowDobPicker(false);
   };
 
   const handleSaveProfile = async () => {
@@ -62,8 +59,6 @@ export default function ProfileScreen() {
       const updated: UserProfile = {
         firstName: draft.firstName.trim(),
         lastName: draft.lastName.trim(),
-        dateOfBirth: draft.dateOfBirth,
-        email: draft.email?.trim() || undefined,
       };
       await saveUserProfile(updated);
       setProfile(updated);
@@ -168,36 +163,6 @@ export default function ProfileScreen() {
                   returnKeyType="next"
                 />
               </Field>
-              <Field label="Date of Birth">
-                <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowDobPicker(true)}>
-                  <Ionicons name="calendar-outline" size={20} color={COLORS.PRIMARY} />
-                  <Text style={styles.pickerBtnText}>
-                    {draft.dateOfBirth
-                      ? format(parseISO(draft.dateOfBirth), 'MMMM d, yyyy')
-                      : 'Select date of birth'}
-                  </Text>
-                </TouchableOpacity>
-                {showDobPicker && (
-                  <DateTimePickerCompat
-                    value={draft.dateOfBirth ? parseISO(draft.dateOfBirth) : new Date()}
-                    mode="date"
-                    onChange={d => setDraft(prev => ({ ...prev, dateOfBirth: format(d, 'yyyy-MM-dd') }))}
-                    onClose={() => setShowDobPicker(false)}
-                  />
-                )}
-              </Field>
-              <Field label="Email">
-                <TextInput
-                  style={styles.input}
-                  value={draft.email ?? ''}
-                  onChangeText={v => setDraft(d => ({ ...d, email: v }))}
-                  placeholder="email@example.com"
-                  placeholderTextColor={COLORS.TEXT_MUTED}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  returnKeyType="done"
-                />
-              </Field>
               <View style={styles.editActions}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={cancelEdit}>
                   <Text style={styles.cancelBtnText}>Cancel</Text>
@@ -218,16 +183,6 @@ export default function ProfileScreen() {
                 icon="person-outline"
                 label="Name"
                 value={[profile.firstName, profile.lastName].filter(Boolean).join(' ') || '—'}
-              />
-              <ProfileRow
-                icon="calendar-outline"
-                label="Date of Birth"
-                value={profile.dateOfBirth ? format(parseISO(profile.dateOfBirth), 'MMMM d, yyyy') : '—'}
-              />
-              <ProfileRow
-                icon="mail-outline"
-                label="Email"
-                value={profile.email || '—'}
                 last
               />
             </>
