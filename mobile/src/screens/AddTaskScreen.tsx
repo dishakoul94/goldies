@@ -10,7 +10,7 @@ import DateTimePickerCompat from '../components/DateTimePickerCompat';
 import ServiceProviderPicker, { ProviderSelection } from '../components/ServiceProviderPicker';
 import { format } from 'date-fns';
 import { RootStackParamList, TaskKind, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider } from '../types';
-import { addTask, addServiceProvider, getServiceProviderById } from '../storage';
+import { addTask, addServiceProvider, getServiceProviderById, loadUserProfile } from '../storage';
 import {
   scheduleExternalTaskNotifications,
   scheduleInternalTaskNotification,
@@ -122,7 +122,8 @@ function ExternalForm({ navigation }: { navigation: any }) {
         createdAt: new Date().toISOString(),
       };
 
-      const ids = await scheduleExternalTaskNotifications(task);
+      const profile = await loadUserProfile();
+      const ids = await scheduleExternalTaskNotifications(task, profile);
       await addTask({ ...task, notificationIds: ids });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
@@ -290,7 +291,8 @@ function InternalForm({ navigation }: { navigation: any }) {
         createdAt: new Date().toISOString(),
       };
 
-      const ids = await scheduleInternalTaskNotification(task);
+      const profile = await loadUserProfile();
+      const ids = await scheduleInternalTaskNotification(task, profile);
       await addTask({ ...task, notificationIds: ids });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
@@ -400,7 +402,8 @@ function InterdayForm({ navigation }: { navigation: any }) {
         createdAt: new Date().toISOString(),
       };
 
-      const ids = await scheduleInterdayTaskNotifications(task);
+      const profile = await loadUserProfile();
+      const ids = await scheduleInterdayTaskNotifications(task, profile);
       await addTask({ ...task, notificationIds: ids });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
