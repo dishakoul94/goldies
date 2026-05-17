@@ -19,28 +19,46 @@ export default function DateTimePickerCompat({ value, mode, onChange, onClose, m
   const [localValue, setLocalValue] = useState(value);
 
   if (Platform.OS === 'ios') {
+    // For date mode, use inline calendar — each tap fires onChange reliably.
+    // For time mode, use spinner + Done so the user can scroll and commit.
+    const isDate = mode === 'date';
+    const iosDisplay = display ?? (isDate ? 'inline' : 'spinner');
+
     const handleDone = () => {
       onChange(localValue);
       onClose?.();
     };
 
     return (
-      <Modal transparent animationType="slide" visible onRequestClose={handleDone}>
+      <Modal transparent animationType="slide" visible onRequestClose={isDate ? onClose : handleDone}>
         <View style={[styles.overlay, { paddingTop: Math.max(insets.top + 40, 100) }]}>
           <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <View style={styles.toolbar}>
-              <TouchableOpacity onPress={handleDone} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Text style={styles.doneBtn}>Done</Text>
-              </TouchableOpacity>
+              {isDate ? (
+                <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <Text style={styles.cancelBtn}>Cancel</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={handleDone} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <Text style={styles.doneBtn}>Done</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <DateTimePicker
-              value={localValue}
+              value={isDate ? value : localValue}
               mode={mode}
-              display={display ?? 'spinner'}
+              display={iosDisplay}
               minimumDate={minimumDate}
-              style={styles.picker}
+              style={isDate ? styles.inlinePicker : styles.picker}
               onChange={(_e: DateTimePickerEvent, d?: Date) => {
-                if (d) setLocalValue(d);
+                if (!d) return;
+                if (isDate) {
+                  // inline calendar: each tap is a committed selection
+                  onChange(d);
+                  onClose?.();
+                } else {
+                  setLocalValue(d);
+                }
               }}
             />
           </View>
@@ -87,7 +105,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#007AFF',
   },
+  cancelBtn: {
+    fontSize: 17,
+    color: '#8E8E93',
+  },
   picker: {
     height: 216,
+  },
+  inlinePicker: {
+    height: 346,
   },
 });
