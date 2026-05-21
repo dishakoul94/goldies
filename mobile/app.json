@@ -30,6 +30,13 @@
     },
     "plugins": [
       [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Goldies to use your microphone so you can speak to Goldie.",
+          "speechRecognitionPermission": "Allow Goldies to recognise your speech for voice input."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",

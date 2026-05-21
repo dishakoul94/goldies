@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, FlatList, StyleSheet, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Animated,
 } from 'react-native';
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,7 +50,54 @@ export default function ChatScreen() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState(false);
   const listRef = useRef<FlatList>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
+
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results[0]?.transcript ?? '';
+    if (transcript) setInput(transcript);
+  });
+
+  useSpeechRecognitionEvent('end', () => setIsListening(false));
+  useSpeechRecognitionEvent('error', () => setIsListening(false));
+
+  useEffect(() => {
+    if (isListening) {
+      pulseLoop.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.5, duration: 700, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+        ]),
+      );
+      pulseLoop.current.start();
+    } else {
+      pulseLoop.current?.stop();
+      pulseAnim.setValue(1);
+    }
+  }, [isListening]);
+
+  useEffect(() => {
+    return () => { if (isListening) ExpoSpeechRecognitionModule.stop(); };
+  }, []);
+
+  const handleMicPress = async () => {
+    if (Platform.OS === 'web') return;
+    if (isListening) {
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+    const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!granted) {
+      showAlert('Microphone permission is needed for voice input.');
+      return;
+    }
+    setInput('');
+    setIsListening(true);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: false });
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -299,15 +347,31 @@ export default function ChatScreen() {
 
         {/* Input */}
         <View style={styles.inputRow}>
+          {Platform.OS !== 'web' && (
+            <TouchableOpacity style={styles.micBtn} onPress={handleMicPress} activeOpacity={0.7}>
+              <Animated.View
+                style={[
+                  styles.micPulse,
+                  isListening && { transform: [{ scale: pulseAnim }], backgroundColor: '#FFD6D6' },
+                ]}
+              />
+              <Ionicons
+                name={isListening ? 'mic' : 'mic-outline'}
+                size={24}
+                color={isListening ? '#E53935' : COLORS.TEXT_MUTED}
+              />
+            </TouchableOpacity>
+          )}
           <TextInput
-            style={styles.textInput}
+            style={[styles.textInput, isListening && styles.textInputListening]}
             value={input}
             onChangeText={setInput}
-            placeholder="Type a message…"
-            placeholderTextColor={COLORS.TEXT_MUTED}
+            placeholder={isListening ? 'Listening…' : 'Type a message…'}
+            placeholderTextColor={isListening ? COLORS.PRIMARY : COLORS.TEXT_MUTED}
             multiline
             maxLength={1000}
             returnKeyType="default"
+            editable={!isListening}
           />
           <TouchableOpacity
             style={[styles.sendBtn, (!input.trim() || loading) && { opacity: 0.4 }]}
@@ -398,10 +462,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.MD, paddingVertical: SPACING.SM,
     backgroundColor: COLORS.WHITE, borderTopWidth: 1, borderTopColor: COLORS.BORDER,
   },
+  micBtn: {
+    width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4,
+  },
+  micPulse: {
+    position: 'absolute', width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'transparent',
+  },
   textInput: {
     flex: 1, backgroundColor: COLORS.BACKGROUND, borderWidth: 1.5, borderColor: COLORS.BORDER,
     borderRadius: 24, paddingHorizontal: SPACING.MD, paddingVertical: SPACING.SM,
     fontSize: FONT.BODY, color: COLORS.TEXT, maxHeight: 120, lineHeight: 26,
+  },
+  textInputListening: {
+    borderColor: COLORS.PRIMARY, borderWidth: 1.5,
   },
   sendBtn: {
     width: 52, height: 52, borderRadius: 26,
