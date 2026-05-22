@@ -48,24 +48,39 @@ const WELCOME: ChatMessage = {
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [input, setInputState] = useState('');
+  const [loading, setLoadingState] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const [voiceMode, setVoiceMode] = useState(false);
+
+  // Refs that mirror state so callbacks/effects always read the latest value
+  const inputRef = useRef('');
+  const loadingRef = useRef(false);
+  const voiceModeRef = useRef(false);
   const voiceInputUsed = useRef(false);
+  const prevListeningRef = useRef(false);
+  // Always points to the current handleSend so the isListening effect can call it
+  const handleSendRef = useRef<() => Promise<void>>(async () => {});
+
   const listRef = useRef<FlatList>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
 
+  // Wrappers that keep refs in sync with state
+  const setInput = (text: string) => { inputRef.current = text; setInputState(text); };
+  const setLoading = (val: boolean) => { loadingRef.current = val; setLoadingState(val); };
+
+  // ─── Speech recognition events ───────────────────────────────────────────
   useSpeechRecognitionEvent('result', (event) => {
     const transcript = event.results[0]?.transcript ?? '';
     if (transcript) setInput(transcript);
   });
-
   useSpeechRecognitionEvent('end', () => setIsListening(false));
   useSpeechRecognitionEvent('error', () => setIsListening(false));
 
+  // ─── Mic pulse animation ─────────────────────────────────────────────────
   useEffect(() => {
     if (isListening) {
       pulseLoop.current = Animated.loop(
@@ -81,19 +96,17 @@ export default function ChatScreen() {
     }
   }, [isListening]);
 
+  // ─── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      if (isListening) ExpoSpeechRecognitionModule.stop();
+      ExpoSpeechRecognitionModule.stop();
       Speech.stop();
     };
   }, []);
 
-  const handleMicPress = async () => {
+  // ─── Start listening helper (extracted so it can be called from multiple places) ──
+  const startListening = useCallback(async () => {
     if (Platform.OS === 'web') return;
-    if (isListening) {
-      ExpoSpeechRecognitionModule.stop();
-      return;
-    }
     const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!granted) {
       showAlert('Microphone permission is needed for voice input.');
@@ -102,8 +115,85 @@ export default function ChatScreen() {
     setInput('');
     setIsListening(true);
     voiceInputUsed.current = true;
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: false });
+  }, []);
+
+  // ─── Voice mode: react to isListening going false ────────────────────────
+  // When STT ends in voice mode:
+  //   • Has transcript → auto-send
+  //   • Empty (user was silent) → wait 1.5 s then re-listen
+  useEffect(() => {
+    if (prevListeningRef.current && !isListening && voiceModeRef.current) {
+      if (inputRef.current.trim()) {
+        handleSendRef.current();
+      } else {
+        const timer = setTimeout(() => {
+          if (voiceModeRef.current && !loadingRef.current) startListening();
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+    prevListeningRef.current = isListening;
+  }, [isListening, startListening]);
+
+  // ─── TTS ─────────────────────────────────────────────────────────────────
+  const speakMessage = useCallback((msgId: string, content: string) => {
+    if (Platform.OS === 'web') return;
+    Speech.stop();
+    setSpeakingMsgId(msgId);
+    const clean = content
+      .replace(/\*\*(.+?)\*\*/gs, '$1')
+      .replace(/\*(.+?)\*/gs, '$1')
+      .replace(/`(.+?)`/gs, '$1')
+      .replace(/#{1,6}\s/g, '')
+      .replace(/\n\n+/g, '. ')
+      .replace(/\n/g, ' ')
+      .trim();
+    Speech.speak(clean, {
+      language: 'en-US',
+      rate: 0.95,
+      onDone: () => {
+        setSpeakingMsgId(null);
+        // In voice mode, kick off the next listening cycle once Goldie finishes speaking
+        if (voiceModeRef.current && !loadingRef.current) startListening();
+      },
+      onStopped: () => setSpeakingMsgId(null),
+      onError: () => setSpeakingMsgId(null),
+    });
+  }, [startListening]);
+
+  const handleSpeak = useCallback((message: ChatMessage) => {
+    if (speakingMsgId === message.id) {
+      Speech.stop();
+      setSpeakingMsgId(null);
+    } else {
+      speakMessage(message.id, message.content);
+    }
+  }, [speakingMsgId, speakMessage]);
+
+  // ─── Voice mode toggle ────────────────────────────────────────────────────
+  const toggleVoiceMode = useCallback(async () => {
+    const next = !voiceModeRef.current;
+    voiceModeRef.current = next;
+    setVoiceMode(next);
+    if (!next) {
+      // Turning off — stop everything
+      Speech.stop();
+      setSpeakingMsgId(null);
+      ExpoSpeechRecognitionModule.stop();
+      setIsListening(false);
+    } else {
+      // Turning on — start listening immediately
+      await startListening();
+    }
+  }, [startListening]);
+
+  // ─── Manual mic button ────────────────────────────────────────────────────
+  const handleMicPress = async () => {
+    if (Platform.OS === 'web') return;
+    if (isListening) { ExpoSpeechRecognitionModule.stop(); return; }
+    await startListening();
   };
 
   useFocusEffect(
@@ -119,6 +209,7 @@ export default function ChatScreen() {
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
+  // ─── Task handlers (unchanged) ────────────────────────────────────────────
   const handleTaskCreate = useCallback(async (payload: TaskCreatePayload) => {
     const id = makeId();
     const now = new Date().toISOString();
@@ -134,7 +225,6 @@ export default function ChatScreen() {
           notificationIds: [],
           createdAt: now,
         };
-        // Persist first so the task exists even if notification scheduling fails.
         await addTask(task);
         const ids = await scheduleExternalTaskNotifications(task).catch(() => []);
         if (ids.length > 0) await updateTask({ ...task, notificationIds: ids });
@@ -176,10 +266,7 @@ export default function ChatScreen() {
     try {
       const allTasks = await loadAllTasks();
       const target = findTaskByTitle(allTasks, payload.input.title);
-      if (!target) {
-        console.warn('[Goldie] Delete: no task found with title:', payload.input.title);
-        return;
-      }
+      if (!target) { console.warn('[Goldie] Delete: no task found with title:', payload.input.title); return; }
       await cancelNotifications(target.notificationIds);
       await deleteTask(target.id);
     } catch (err) {
@@ -191,13 +278,8 @@ export default function ChatScreen() {
     try {
       const allTasks = await loadAllTasks();
       const target = findTaskByTitle(allTasks, payload.input.title);
-      if (!target) {
-        console.warn('[Goldie] Edit: no task found with title:', payload.input.title);
-        return;
-      }
-
+      if (!target) { console.warn('[Goldie] Edit: no task found with title:', payload.input.title); return; }
       await cancelNotifications(target.notificationIds);
-
       if (payload.tool === 'edit_external_task' && target.kind === 'external') {
         const updated: ExternalTask = {
           ...target,
@@ -242,39 +324,12 @@ export default function ChatScreen() {
     }
   }, []);
 
-  const speakMessage = useCallback((msgId: string, content: string) => {
-    if (Platform.OS === 'web') return;
-    Speech.stop();
-    setSpeakingMsgId(msgId);
-    const clean = content
-      .replace(/\*\*(.+?)\*\*/gs, '$1')
-      .replace(/\*(.+?)\*/gs, '$1')
-      .replace(/`(.+?)`/gs, '$1')
-      .replace(/#{1,6}\s/g, '')
-      .replace(/\n\n+/g, '. ')
-      .replace(/\n/g, ' ')
-      .trim();
-    Speech.speak(clean, {
-      language: 'en-US',
-      rate: 0.95,
-      onDone: () => setSpeakingMsgId(null),
-      onStopped: () => setSpeakingMsgId(null),
-      onError: () => setSpeakingMsgId(null),
-    });
-  }, []);
-
-  const handleSpeak = useCallback((message: ChatMessage) => {
-    if (speakingMsgId === message.id) {
-      Speech.stop();
-      setSpeakingMsgId(null);
-    } else {
-      speakMessage(message.id, message.content);
-    }
-  }, [speakingMsgId, speakMessage]);
-
+  // ─── Send ─────────────────────────────────────────────────────────────────
   const handleSend = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
+    // Use inputRef so this function always sees the latest value even when
+    // called via handleSendRef from the isListening effect.
+    const text = inputRef.current.trim();
+    if (!text || loadingRef.current) return;
 
     const usedVoice = voiceInputUsed.current;
     voiceInputUsed.current = false;
@@ -284,19 +339,8 @@ export default function ChatScreen() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setInput('');
 
-    const userMsg: ChatMessage = {
-      id: makeId(),
-      role: 'user',
-      content: text,
-      timestamp: new Date().toISOString(),
-    };
-
-    const assistantMsg: ChatMessage = {
-      id: makeId(),
-      role: 'assistant',
-      content: '',
-      timestamp: new Date().toISOString(),
-    };
+    const userMsg: ChatMessage = { id: makeId(), role: 'user', content: text, timestamp: new Date().toISOString() };
+    const assistantMsg: ChatMessage = { id: makeId(), role: 'assistant', content: '', timestamp: new Date().toISOString() };
 
     const nextMessages = [...messages.filter(m => m.id !== 'welcome' || messages.length > 1), userMsg, assistantMsg];
     setMessages(nextMessages);
@@ -306,8 +350,6 @@ export default function ChatScreen() {
     try {
       const allTasks = await loadAllTasks();
       const tasksContext = buildTasksContext(allTasks);
-
-      // Build conversation history for the API (exclude the empty assistant placeholder)
       const history = nextMessages
         .filter(m => m.id !== 'welcome' && m.id !== assistantMsg.id && m.content)
         .map(m => ({ role: m.role, content: m.content }));
@@ -320,9 +362,7 @@ export default function ChatScreen() {
         userName,
         (token) => {
           accumulated += token;
-          setMessages(prev =>
-            prev.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated } : m),
-          );
+          setMessages(prev => prev.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated } : m));
           scrollToBottom();
         },
         handleTaskCreate,
@@ -330,13 +370,11 @@ export default function ChatScreen() {
         handleTaskEdit,
       );
 
-      // Save complete history
-      const finalMessages = nextMessages.map(m =>
-        m.id === assistantMsg.id ? { ...m, content: accumulated } : m,
-      );
+      const finalMessages = nextMessages.map(m => m.id === assistantMsg.id ? { ...m, content: accumulated } : m);
       await saveChatHistory(finalMessages);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (usedVoice && accumulated) speakMessage(assistantMsg.id, accumulated);
+      // Speak when voice was used manually OR when voice mode is on
+      if ((usedVoice || voiceModeRef.current) && accumulated) speakMessage(assistantMsg.id, accumulated);
     } catch (err) {
       setMessages(prev =>
         prev.map(m =>
@@ -350,7 +388,12 @@ export default function ChatScreen() {
     }
   };
 
+  // Keep the ref current every render so the isListening effect can call it
+  handleSendRef.current = handleSend;
+
   const handleClear = () => {
+    Speech.stop();
+    setSpeakingMsgId(null);
     setMessages([WELCOME]);
     saveChatHistory([]);
   };
@@ -366,12 +409,29 @@ export default function ChatScreen() {
             </View>
             <View>
               <Text style={styles.headerName}>Goldie</Text>
-              <Text style={styles.headerStatus}>Your friendly helper</Text>
+              <Text style={[styles.headerStatus, voiceMode && styles.headerStatusActive]}>
+                {voiceMode ? 'Voice mode on' : 'Your friendly helper'}
+              </Text>
             </View>
           </View>
-          <TouchableOpacity onPress={handleClear} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Ionicons name="refresh-outline" size={22} color={COLORS.TEXT_MUTED} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {Platform.OS !== 'web' && (
+              <TouchableOpacity
+                onPress={toggleVoiceMode}
+                style={[styles.voiceModeBtn, voiceMode && styles.voiceModeBtnActive]}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons
+                  name={voiceMode ? 'headset' : 'headset-outline'}
+                  size={22}
+                  color={voiceMode ? COLORS.PRIMARY : COLORS.TEXT_MUTED}
+                />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={handleClear} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="refresh-outline" size={22} color={COLORS.TEXT_MUTED} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Messages */}
@@ -379,7 +439,7 @@ export default function ChatScreen() {
           ref={listRef}
           data={messages}
           keyExtractor={m => m.id}
-          renderItem={({ item }) => <MessageBubble message={item} speakingMsgId={speakingMsgId} onSpeak={handleSpeak} />}
+          renderItem={({ item }) => <MessageBubble message={item} speakingMsgId={speakingMsgId} onSpeak={handleSpeak} voiceMode={voiceMode} />}
           contentContainerStyle={styles.messageList}
           onLayout={scrollToBottom}
           showsVerticalScrollIndicator={false}
@@ -409,8 +469,8 @@ export default function ChatScreen() {
             style={[styles.textInput, isListening && styles.textInputListening]}
             value={input}
             onChangeText={setInput}
-            placeholder={isListening ? 'Listening…' : 'Type a message…'}
-            placeholderTextColor={isListening ? COLORS.PRIMARY : COLORS.TEXT_MUTED}
+            placeholder={isListening ? 'Listening…' : voiceMode ? 'Voice mode active…' : 'Type a message…'}
+            placeholderTextColor={isListening ? COLORS.PRIMARY : voiceMode ? COLORS.PRIMARY : COLORS.TEXT_MUTED}
             multiline
             maxLength={1000}
             returnKeyType="default"
@@ -433,10 +493,12 @@ function MessageBubble({
   message,
   speakingMsgId,
   onSpeak,
+  voiceMode,
 }: {
   message: ChatMessage;
   speakingMsgId: string | null;
   onSpeak: (msg: ChatMessage) => void;
+  voiceMode: boolean;
 }) {
   const isUser = message.role === 'user';
   const isSpeaking = speakingMsgId === message.id;
@@ -457,7 +519,8 @@ function MessageBubble({
             <ActivityIndicator size="small" color={COLORS.TEXT_MUTED} />
           )}
         </View>
-        {!isUser && message.content && Platform.OS !== 'web' && (
+        {/* Hide speaker icon in voice mode — TTS is automatic */}
+        {!isUser && message.content && Platform.OS !== 'web' && !voiceMode && (
           <TouchableOpacity onPress={() => onSpeak(message)} style={styles.speakBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons
               name={isSpeaking ? 'stop-circle-outline' : 'volume-medium-outline'}
@@ -492,6 +555,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.WHITE, borderBottomWidth: 1, borderBottomColor: COLORS.BORDER,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.SM },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.SM },
+  voiceModeBtn: { padding: 4, borderRadius: 20 },
+  voiceModeBtnActive: { backgroundColor: COLORS.PRIMARY_LIGHT },
   avatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: COLORS.PRIMARY, alignItems: 'center', justifyContent: 'center',
@@ -499,6 +565,7 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 20, fontWeight: '800', color: COLORS.WHITE },
   headerName: { fontSize: FONT.BODY, fontWeight: '700', color: COLORS.TEXT },
   headerStatus: { fontSize: FONT.CAPTION, color: COLORS.TEXT_MUTED },
+  headerStatusActive: { color: COLORS.PRIMARY, fontWeight: '600' },
   messageList: { padding: SPACING.MD, paddingBottom: SPACING.SM, gap: SPACING.SM },
   bubbleWrapper: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACING.XS, marginBottom: SPACING.SM },
   bubbleLeft: { justifyContent: 'flex-start' },
@@ -540,9 +607,7 @@ const styles = StyleSheet.create({
     borderRadius: 24, paddingHorizontal: SPACING.MD, paddingVertical: SPACING.SM,
     fontSize: FONT.BODY, color: COLORS.TEXT, maxHeight: 120, lineHeight: 26,
   },
-  textInputListening: {
-    borderColor: COLORS.PRIMARY, borderWidth: 1.5,
-  },
+  textInputListening: { borderColor: COLORS.PRIMARY, borderWidth: 1.5 },
   sendBtn: {
     width: 52, height: 52, borderRadius: 26,
     backgroundColor: COLORS.PRIMARY, alignItems: 'center', justifyContent: 'center',
