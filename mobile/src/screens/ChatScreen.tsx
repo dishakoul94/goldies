@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, Animated,
 } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
+import * as Speech from 'expo-speech';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,6 +52,8 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const voiceInputUsed = useRef(false);
   const listRef = useRef<FlatList>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
@@ -79,7 +82,10 @@ export default function ChatScreen() {
   }, [isListening]);
 
   useEffect(() => {
-    return () => { if (isListening) ExpoSpeechRecognitionModule.stop(); };
+    return () => {
+      if (isListening) ExpoSpeechRecognitionModule.stop();
+      Speech.stop();
+    };
   }, []);
 
   const handleMicPress = async () => {
@@ -95,6 +101,7 @@ export default function ChatScreen() {
     }
     setInput('');
     setIsListening(true);
+    voiceInputUsed.current = true;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: false });
   };
@@ -235,9 +242,44 @@ export default function ChatScreen() {
     }
   }, []);
 
+  const speakMessage = useCallback((msgId: string, content: string) => {
+    if (Platform.OS === 'web') return;
+    Speech.stop();
+    setSpeakingMsgId(msgId);
+    const clean = content
+      .replace(/\*\*(.+?)\*\*/gs, '$1')
+      .replace(/\*(.+?)\*/gs, '$1')
+      .replace(/`(.+?)`/gs, '$1')
+      .replace(/#{1,6}\s/g, '')
+      .replace(/\n\n+/g, '. ')
+      .replace(/\n/g, ' ')
+      .trim();
+    Speech.speak(clean, {
+      language: 'en-US',
+      rate: 0.95,
+      onDone: () => setSpeakingMsgId(null),
+      onStopped: () => setSpeakingMsgId(null),
+      onError: () => setSpeakingMsgId(null),
+    });
+  }, []);
+
+  const handleSpeak = useCallback((message: ChatMessage) => {
+    if (speakingMsgId === message.id) {
+      Speech.stop();
+      setSpeakingMsgId(null);
+    } else {
+      speakMessage(message.id, message.content);
+    }
+  }, [speakingMsgId, speakMessage]);
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
+
+    const usedVoice = voiceInputUsed.current;
+    voiceInputUsed.current = false;
+    Speech.stop();
+    setSpeakingMsgId(null);
 
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setInput('');
@@ -294,6 +336,7 @@ export default function ChatScreen() {
       );
       await saveChatHistory(finalMessages);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      if (usedVoice && accumulated) speakMessage(assistantMsg.id, accumulated);
     } catch (err) {
       setMessages(prev =>
         prev.map(m =>
@@ -336,7 +379,7 @@ export default function ChatScreen() {
           ref={listRef}
           data={messages}
           keyExtractor={m => m.id}
-          renderItem={({ item }) => <MessageBubble message={item} />}
+          renderItem={({ item }) => <MessageBubble message={item} speakingMsgId={speakingMsgId} onSpeak={handleSpeak} />}
           contentContainerStyle={styles.messageList}
           onLayout={scrollToBottom}
           showsVerticalScrollIndicator={false}
@@ -386,8 +429,17 @@ export default function ChatScreen() {
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  message,
+  speakingMsgId,
+  onSpeak,
+}: {
+  message: ChatMessage;
+  speakingMsgId: string | null;
+  onSpeak: (msg: ChatMessage) => void;
+}) {
   const isUser = message.role === 'user';
+  const isSpeaking = speakingMsgId === message.id;
   return (
     <View style={[styles.bubbleWrapper, isUser ? styles.bubbleRight : styles.bubbleLeft]}>
       {!isUser && (
@@ -395,13 +447,24 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           <Text style={styles.bubbleAvatarText}>G</Text>
         </View>
       )}
-      <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-        {message.content ? (
-          <Text style={[styles.bubbleText, isUser ? styles.userBubbleText : styles.assistantBubbleText]}>
-            {message.content}
-          </Text>
-        ) : (
-          <ActivityIndicator size="small" color={COLORS.TEXT_MUTED} />
+      <View style={styles.bubbleColumn}>
+        <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
+          {message.content ? (
+            <Text style={[styles.bubbleText, isUser ? styles.userBubbleText : styles.assistantBubbleText]}>
+              {message.content}
+            </Text>
+          ) : (
+            <ActivityIndicator size="small" color={COLORS.TEXT_MUTED} />
+          )}
+        </View>
+        {!isUser && message.content && Platform.OS !== 'web' && (
+          <TouchableOpacity onPress={() => onSpeak(message)} style={styles.speakBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons
+              name={isSpeaking ? 'stop-circle-outline' : 'volume-medium-outline'}
+              size={15}
+              color={isSpeaking ? COLORS.PRIMARY : COLORS.TEXT_MUTED}
+            />
+          </TouchableOpacity>
         )}
       </View>
     </View>
@@ -446,8 +509,10 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   bubbleAvatarText: { fontSize: 14, fontWeight: '800', color: COLORS.PRIMARY },
+  bubbleColumn: { maxWidth: '80%', gap: 2 },
+  speakBtn: { alignSelf: 'flex-start', paddingLeft: 4, paddingTop: 2 },
   bubble: {
-    maxWidth: '80%', borderRadius: 20, paddingHorizontal: SPACING.MD, paddingVertical: SPACING.SM,
+    borderRadius: 20, paddingHorizontal: SPACING.MD, paddingVertical: SPACING.SM,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
   },
   userBubble: { backgroundColor: COLORS.PRIMARY, borderBottomRightRadius: 4 },
