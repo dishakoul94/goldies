@@ -16,7 +16,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.dishakoul.goldies",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Allow Goldies to access your photo library."
       }
     },
     "android": {
