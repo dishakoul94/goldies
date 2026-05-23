@@ -1,9 +1,7 @@
 import { Task, ExternalTask, TaskCreatePayload, TaskDeletePayload, TaskEditPayload } from './types';
 import { addDays, parseISO, isToday, isWithinInterval, format } from 'date-fns';
 
-export const BASE_URL = __DEV__
-  ? 'http://localhost:8000'
-  : 'https://goldies-production.up.railway.app';
+export const BASE_URL = 'https://goldies-production.up.railway.app';
 
 export async function sendChatMessage(
   messages: Array<{ role: string; content: string }>,
