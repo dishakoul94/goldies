@@ -29,7 +29,7 @@ function makeId(): string {
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const RECURRENCE_UNITS: RecurrenceUnit[] = ['days', 'weeks', 'months'];
 const GROUPS: InterdayGroup[] = ['morning', 'afternoon', 'evening', 'none'];
-const EARLY_REMINDER_OPTIONS = [0, 1, 2, 3, 7, 14];
+const EARLY_REMINDER_OPTIONS = [1, 2, 3, 7, 14];
 
 export default function AddTaskScreen() {
   const navigation = useNavigation();
@@ -227,25 +227,23 @@ function ExternalForm({ navigation, defaultReminderTime }: { navigation: any; de
         )}
       </FormField>
 
-      <FormField label="Early reminder">
+      <FormField label="Early reminders (optional)">
+        <Text style={styles.fieldHint}>
+          Optional — get notified before the appointment date in addition to any day-of reminder.
+        </Text>
         <View style={styles.chipRow}>
           {EARLY_REMINDER_OPTIONS.map(n => {
-            const isNone = n === 0;
-            const active = isNone ? earlyReminderDays.length === 0 : earlyReminderDays.includes(n);
-            const toggle = () => {
-              if (isNone) { setEarlyReminderDays([]); return; }
-              setEarlyReminderDays(prev =>
-                prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n],
-              );
-            };
+            const active = earlyReminderDays.includes(n);
             return (
               <TouchableOpacity
                 key={n}
                 style={[styles.chip, active && styles.chipActive]}
-                onPress={toggle}
+                onPress={() => setEarlyReminderDays(prev =>
+                  prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n]
+                )}
               >
                 <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
-                  {isNone ? 'None' : `${n}d`}
+                  {n === 1 ? '1 day before' : `${n} days before`}
                 </Text>
               </TouchableOpacity>
             );
@@ -299,6 +297,7 @@ function InternalForm({ navigation, defaultReminderTime }: { navigation: any; de
   const [notes, setNotes] = useState('');
   const [dueDate, setDueDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
   const [intervalDays, setIntervalDays] = useState(7);
   const [earlyReminderDays, setEarlyReminderDays] = useState<number[]>([]);
   const [reminderTimeValue, setReminderTimeValue] = useState(() => {
@@ -307,8 +306,6 @@ function InternalForm({ navigation, defaultReminderTime }: { navigation: any; de
   });
   const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const INTERVAL_OPTIONS = [0, 1, 3, 7, 14, 30];
 
   const handleSave = async () => {
     if (!title.trim()) { showAlert('Please enter a title'); return; }
@@ -320,7 +317,7 @@ function InternalForm({ navigation, defaultReminderTime }: { navigation: any; de
         title: title.trim(),
         notes: notes.trim() || undefined,
         nextDueDate: format(dueDate, 'yyyy-MM-dd'),
-        intervalDays,
+        intervalDays: isRecurring ? intervalDays : 0,
         earlyReminderDays,
         reminderTime: format(reminderTimeValue, 'HH:mm'),
         notificationIds: [],
@@ -367,41 +364,50 @@ function InternalForm({ navigation, defaultReminderTime }: { navigation: any; de
         )}
       </FormField>
 
-      <FormField label="Remind me every">
-        <View style={styles.chipRow}>
-          {INTERVAL_OPTIONS.map(n => (
-            <TouchableOpacity
-              key={n}
-              style={[styles.chip, intervalDays === n && styles.chipActive]}
-              onPress={() => setIntervalDays(n)}
-            >
-              <Text style={[styles.chipLabel, intervalDays === n && styles.chipLabelActive]}>
-                {n === 0 ? 'Once' : `${n}d`}
-              </Text>
-            </TouchableOpacity>
-          ))}
+      <FormField label="Does this recur?">
+        <View style={styles.toggleRow}>
+          <Switch
+            value={isRecurring}
+            onValueChange={setIsRecurring}
+            thumbColor={isRecurring ? COLORS.PRIMARY : undefined}
+            trackColor={{ true: COLORS.PRIMARY_LIGHT }}
+          />
+          <Text style={styles.toggleLabel}>{isRecurring ? 'Yes' : 'No — one-time task'}</Text>
         </View>
+        {isRecurring && (
+          <View style={[styles.chipRow, { marginTop: SPACING.SM }]}>
+            {[1, 3, 7, 14, 30].map(n => (
+              <TouchableOpacity
+                key={n}
+                style={[styles.chip, intervalDays === n && styles.chipActive]}
+                onPress={() => setIntervalDays(n)}
+              >
+                <Text style={[styles.chipLabel, intervalDays === n && styles.chipLabelActive]}>
+                  {`Every ${n}d`}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </FormField>
 
-      <FormField label="Early reminder">
+      <FormField label="Early reminders (optional)">
+        <Text style={styles.fieldHint}>
+          You'll get a reminder at {format(reminderTimeValue, 'h:mm a')} on the due date. Select below to also be notified earlier.
+        </Text>
         <View style={styles.chipRow}>
           {EARLY_REMINDER_OPTIONS.map(n => {
-            const isNone = n === 0;
-            const active = isNone ? earlyReminderDays.length === 0 : earlyReminderDays.includes(n);
-            const toggle = () => {
-              if (isNone) { setEarlyReminderDays([]); return; }
-              setEarlyReminderDays(prev =>
-                prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n],
-              );
-            };
+            const active = earlyReminderDays.includes(n);
             return (
               <TouchableOpacity
                 key={n}
                 style={[styles.chip, active && styles.chipActive]}
-                onPress={toggle}
+                onPress={() => setEarlyReminderDays(prev =>
+                  prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n]
+                )}
               >
                 <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
-                  {isNone ? 'None' : `${n}d`}
+                  {n === 1 ? '1 day before' : `${n} days before`}
                 </Text>
               </TouchableOpacity>
             );
@@ -611,6 +617,7 @@ const styles = StyleSheet.create({
   formTitle: { fontSize: FONT.TITLE_CARD, fontWeight: '800', color: COLORS.TEXT, marginBottom: SPACING.LG },
   field: { marginBottom: SPACING.MD },
   label: { fontSize: FONT.BODY_SM, fontWeight: '700', color: COLORS.TEXT, marginBottom: SPACING.XS },
+  fieldHint: { fontSize: FONT.BODY_SM, color: COLORS.TEXT_SECONDARY, marginBottom: SPACING.SM },
   input: {
     backgroundColor: COLORS.WHITE,
     borderWidth: 1.5,

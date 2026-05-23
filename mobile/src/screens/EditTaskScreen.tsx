@@ -21,8 +21,7 @@ type RouteParams = RouteProp<RootStackParamList, 'EditTask'>;
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const RECURRENCE_UNITS: RecurrenceUnit[] = ['days', 'weeks', 'months'];
 const GROUPS: InterdayGroup[] = ['morning', 'afternoon', 'evening', 'none'];
-const EARLY_REMINDER_OPTIONS = [0, 1, 2, 3, 7, 14];
-const INTERVAL_OPTIONS = [0, 1, 3, 7, 14, 30];
+const EARLY_REMINDER_OPTIONS = [1, 2, 3, 7, 14];
 
 export default function EditTaskScreen() {
   const navigation = useNavigation();
@@ -201,20 +200,16 @@ function ExternalEditForm({ task, navigation, defaultReminderTime }: { task: Ext
           </View>
         )}
       </FormField>
-      <FormField label="Early reminder">
+      <FormField label="Early reminders (optional)">
+        <Text style={styles.fieldHint}>
+          Optional — get notified before the appointment date in addition to any day-of reminder.
+        </Text>
         <View style={styles.chipRow}>
           {EARLY_REMINDER_OPTIONS.map(n => {
-            const isNone = n === 0;
-            const active = isNone ? earlyReminderDays.length === 0 : earlyReminderDays.includes(n);
-            const toggle = () => {
-              if (isNone) { setEarlyReminderDays([]); return; }
-              setEarlyReminderDays(prev =>
-                prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n],
-              );
-            };
+            const active = earlyReminderDays.includes(n);
             return (
-              <TouchableOpacity key={n} style={[styles.chip, active && styles.chipActive]} onPress={toggle}>
-                <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{isNone ? 'None' : `${n}d`}</Text>
+              <TouchableOpacity key={n} style={[styles.chip, active && styles.chipActive]} onPress={() => setEarlyReminderDays(prev => prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n])}>
+                <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{n === 1 ? '1 day before' : `${n} days before`}</Text>
               </TouchableOpacity>
             );
           })}
@@ -250,7 +245,8 @@ function InternalEditForm({ task, navigation, defaultReminderTime }: { task: Int
   const [notes, setNotes] = useState(task.notes ?? '');
   const [dueDate, setDueDate] = useState(parseISO(task.nextDueDate));
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [intervalDays, setIntervalDays] = useState(task.intervalDays);
+  const [isRecurring, setIsRecurring] = useState(task.intervalDays > 0);
+  const [intervalDays, setIntervalDays] = useState(task.intervalDays > 0 ? task.intervalDays : 7);
   const [earlyReminderDays, setEarlyReminderDays] = useState<number[]>(task.earlyReminderDays ?? []);
   const [reminderTimeValue, setReminderTimeValue] = useState(() => {
     const hhmm = task.reminderTime ?? defaultReminderTime;
@@ -267,7 +263,7 @@ function InternalEditForm({ task, navigation, defaultReminderTime }: { task: Int
       await cancelNotifications(task.notificationIds);
       const updated: InternalTask = {
         ...task, title: title.trim(), notes: notes.trim() || undefined,
-        nextDueDate: format(dueDate, 'yyyy-MM-dd'), intervalDays, earlyReminderDays,
+        nextDueDate: format(dueDate, 'yyyy-MM-dd'), intervalDays: isRecurring ? intervalDays : 0, earlyReminderDays,
         reminderTime: format(reminderTimeValue, 'HH:mm'), notificationIds: [],
       };
       const profile = await loadUserProfile();
@@ -296,27 +292,36 @@ function InternalEditForm({ task, navigation, defaultReminderTime }: { task: Int
             onClose={() => setShowDatePicker(false)} />
         )}
       </FormField>
-      <FormField label="Remind me every">
-        <View style={styles.chipRow}>
-          {INTERVAL_OPTIONS.map(n => (
-            <TouchableOpacity key={n} style={[styles.chip, intervalDays === n && styles.chipActive]} onPress={() => setIntervalDays(n)}>
-              <Text style={[styles.chipLabel, intervalDays === n && styles.chipLabelActive]}>{n === 0 ? 'Once' : `${n}d`}</Text>
-            </TouchableOpacity>
-          ))}
+      <FormField label="Does this recur?">
+        <View style={styles.toggleRow}>
+          <Switch
+            value={isRecurring}
+            onValueChange={setIsRecurring}
+            thumbColor={isRecurring ? COLORS.PRIMARY : undefined}
+            trackColor={{ true: COLORS.PRIMARY_LIGHT }}
+          />
+          <Text style={styles.toggleLabel}>{isRecurring ? 'Yes' : 'No — one-time task'}</Text>
         </View>
+        {isRecurring && (
+          <View style={[styles.chipRow, { marginTop: SPACING.SM }]}>
+            {[1, 3, 7, 14, 30].map(n => (
+              <TouchableOpacity key={n} style={[styles.chip, intervalDays === n && styles.chipActive]} onPress={() => setIntervalDays(n)}>
+                <Text style={[styles.chipLabel, intervalDays === n && styles.chipLabelActive]}>{`Every ${n}d`}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </FormField>
-      <FormField label="Early reminder">
+      <FormField label="Early reminders (optional)">
+        <Text style={styles.fieldHint}>
+          You'll get a reminder at {format(reminderTimeValue, 'h:mm a')} on the due date. Select below to also be notified earlier.
+        </Text>
         <View style={styles.chipRow}>
           {EARLY_REMINDER_OPTIONS.map(n => {
-            const isNone = n === 0;
-            const active = isNone ? earlyReminderDays.length === 0 : earlyReminderDays.includes(n);
-            const toggle = () => {
-              if (isNone) { setEarlyReminderDays([]); return; }
-              setEarlyReminderDays(prev => prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n]);
-            };
+            const active = earlyReminderDays.includes(n);
             return (
-              <TouchableOpacity key={n} style={[styles.chip, active && styles.chipActive]} onPress={toggle}>
-                <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{isNone ? 'None' : `${n}d`}</Text>
+              <TouchableOpacity key={n} style={[styles.chip, active && styles.chipActive]} onPress={() => setEarlyReminderDays(prev => prev.includes(n) ? prev.filter(d => d !== n) : [...prev, n])}>
+                <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{n === 1 ? '1 day before' : `${n} days before`}</Text>
               </TouchableOpacity>
             );
           })}
@@ -459,6 +464,7 @@ const styles = StyleSheet.create({
   formTitle: { fontSize: FONT.TITLE_CARD, fontWeight: '800', color: COLORS.TEXT, marginBottom: SPACING.LG },
   field: { marginBottom: SPACING.MD },
   label: { fontSize: FONT.BODY_SM, fontWeight: '700', color: COLORS.TEXT, marginBottom: SPACING.XS },
+  fieldHint: { fontSize: FONT.BODY_SM, color: COLORS.TEXT_SECONDARY, marginBottom: SPACING.SM },
   input: {
     backgroundColor: COLORS.WHITE, borderWidth: 1.5, borderColor: COLORS.BORDER, borderRadius: RADIUS.CARD,
     paddingHorizontal: SPACING.MD, paddingVertical: SPACING.SM, fontSize: FONT.BODY, color: COLORS.TEXT, minHeight: 56,
