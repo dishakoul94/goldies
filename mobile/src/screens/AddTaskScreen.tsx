@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity,
   Switch, Platform, KeyboardAvoidingView,
@@ -43,17 +43,22 @@ export default function AddTaskScreen() {
     });
   }, []);
 
+  const scrollRef = useRef<ScrollView>(null);
+  const onNotesFocus = () => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+
   return (
     <View style={styles.safe}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator>
-        <Text style={styles.formTitle}>
-          {kind === 'external' ? '📅 New Appointment' : kind === 'internal' ? '✅ New To-Do' : '🔁 New Daily Task'}
-        </Text>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator>
+          <Text style={styles.formTitle}>
+            {kind === 'external' ? '📅 New Appointment' : kind === 'internal' ? '✅ New To-Do' : '🔁 New Daily Task'}
+          </Text>
 
-        {kind === 'external' && <ExternalForm navigation={navigation} defaultReminderTime={defaultReminderTime} />}
-        {kind === 'internal' && <InternalForm navigation={navigation} defaultReminderTime={defaultReminderTime} />}
-        {kind === 'interday' && <InterdayForm navigation={navigation} />}
-      </ScrollView>
+          {kind === 'external' && <ExternalForm navigation={navigation} defaultReminderTime={defaultReminderTime} onNotesFocus={onNotesFocus} />}
+          {kind === 'internal' && <InternalForm navigation={navigation} defaultReminderTime={defaultReminderTime} onNotesFocus={onNotesFocus} />}
+          {kind === 'interday' && <InterdayForm navigation={navigation} onNotesFocus={onNotesFocus} />}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -67,7 +72,7 @@ function buildAutoTitle(name: string, specialty?: string): string {
     : `Meeting with ${name}`;
 }
 
-function ExternalForm({ navigation, defaultReminderTime }: { navigation: any; defaultReminderTime: string }) {
+function ExternalForm({ navigation, defaultReminderTime, onNotesFocus }: { navigation: any; defaultReminderTime: string; onNotesFocus: () => void }) {
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [dateTime, setDateTime] = useState(new Date());
@@ -278,6 +283,7 @@ function ExternalForm({ navigation, defaultReminderTime }: { navigation: any; de
           style={[styles.input, styles.notesInput]}
           value={notes}
           onChangeText={setNotes}
+          onFocus={onNotesFocus}
           placeholder="Any extra details..."
           placeholderTextColor={COLORS.TEXT_MUTED}
           multiline
@@ -292,7 +298,7 @@ function ExternalForm({ navigation, defaultReminderTime }: { navigation: any; de
 
 // ─── Internal Form ────────────────────────────────────────────────────────────
 
-function InternalForm({ navigation, defaultReminderTime }: { navigation: any; defaultReminderTime: string }) {
+function InternalForm({ navigation, defaultReminderTime, onNotesFocus }: { navigation: any; defaultReminderTime: string; onNotesFocus: () => void }) {
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [dueDate, setDueDate] = useState(new Date());
@@ -435,6 +441,7 @@ function InternalForm({ navigation, defaultReminderTime }: { navigation: any; de
           style={[styles.input, styles.notesInput]}
           value={notes}
           onChangeText={setNotes}
+          onFocus={onNotesFocus}
           placeholder="Any extra details..."
           placeholderTextColor={COLORS.TEXT_MUTED}
           multiline
@@ -449,7 +456,7 @@ function InternalForm({ navigation, defaultReminderTime }: { navigation: any; de
 
 // ─── Interday Form ────────────────────────────────────────────────────────────
 
-function InterdayForm({ navigation }: { navigation: any }) {
+function InterdayForm({ navigation, onNotesFocus }: { navigation: any; onNotesFocus: () => void }) {
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [hasTime, setHasTime] = useState(false);
@@ -577,6 +584,7 @@ function InterdayForm({ navigation }: { navigation: any }) {
           style={[styles.input, styles.notesInput]}
           value={notes}
           onChangeText={setNotes}
+          onFocus={onNotesFocus}
           placeholder="Any extra details..."
           placeholderTextColor={COLORS.TEXT_MUTED}
           multiline

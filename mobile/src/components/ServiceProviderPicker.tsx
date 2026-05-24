@@ -220,7 +220,7 @@ export default function ServiceProviderPicker({ value, onChange }: Props) {
               style={styles.newFormCancelBtn}
               onPress={() => setShowNewForm(false)}
             >
-              <Text style={styles.cancelLabel}>Back</Text>
+              <Text style={styles.cancelLabel}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.newFormConfirmBtn, !draftName.trim() && { opacity: 0.4 }]}
@@ -228,7 +228,7 @@ export default function ServiceProviderPicker({ value, onChange }: Props) {
               disabled={!draftName.trim()}
             >
               <Ionicons name="checkmark" size={16} color={COLORS.WHITE} />
-              <Text style={styles.newFormConfirmText}>Use this provider</Text>
+              <Text style={styles.newFormConfirmText}>Save</Text>
             </TouchableOpacity>
           </View>
         </>

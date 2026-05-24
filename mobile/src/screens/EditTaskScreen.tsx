@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity,
   Switch, Platform, KeyboardAvoidingView, ActivityIndicator,
@@ -56,17 +56,20 @@ export default function EditTaskScreen() {
     );
   }
 
+  const scrollRef = useRef<ScrollView>(null);
+  const onNotesFocus = () => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={scrollRef} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <Text style={styles.formTitle}>
             {task.kind === 'external' ? '📅 Edit Appointment' : task.kind === 'internal' ? '✅ Edit To-Do' : '🔁 Edit Daily Task'}
           </Text>
 
-          {task.kind === 'external' && <ExternalEditForm task={task} navigation={navigation} defaultReminderTime={defaultReminderTime} />}
-          {task.kind === 'internal' && <InternalEditForm task={task} navigation={navigation} defaultReminderTime={defaultReminderTime} />}
-          {task.kind === 'interday' && <InterdayEditForm task={task} navigation={navigation} />}
+          {task.kind === 'external' && <ExternalEditForm task={task} navigation={navigation} defaultReminderTime={defaultReminderTime} onNotesFocus={onNotesFocus} />}
+          {task.kind === 'internal' && <InternalEditForm task={task} navigation={navigation} defaultReminderTime={defaultReminderTime} onNotesFocus={onNotesFocus} />}
+          {task.kind === 'interday' && <InterdayEditForm task={task} navigation={navigation} onNotesFocus={onNotesFocus} />}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -77,7 +80,7 @@ function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function ExternalEditForm({ task, navigation, defaultReminderTime }: { task: ExternalTask; navigation: any; defaultReminderTime: string }) {
+function ExternalEditForm({ task, navigation, defaultReminderTime, onNotesFocus }: { task: ExternalTask; navigation: any; defaultReminderTime: string; onNotesFocus: () => void }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? '');
   const [dateTime, setDateTime] = useState(parseISO(task.dateTime));
@@ -233,14 +236,14 @@ function ExternalEditForm({ task, navigation, defaultReminderTime }: { task: Ext
         )}
       </FormField>
       <FormField label="Notes (optional)">
-        <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />
+        <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} onFocus={onNotesFocus} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />
       </FormField>
       <SaveButton onPress={handleSave} loading={saving} />
     </>
   );
 }
 
-function InternalEditForm({ task, navigation, defaultReminderTime }: { task: InternalTask; navigation: any; defaultReminderTime: string }) {
+function InternalEditForm({ task, navigation, defaultReminderTime, onNotesFocus }: { task: InternalTask; navigation: any; defaultReminderTime: string; onNotesFocus: () => void }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? '');
   const [dueDate, setDueDate] = useState(parseISO(task.nextDueDate));
@@ -339,14 +342,14 @@ function InternalEditForm({ task, navigation, defaultReminderTime }: { task: Int
         )}
       </FormField>
       <FormField label="Notes (optional)">
-        <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />
+        <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} onFocus={onNotesFocus} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />
       </FormField>
       <SaveButton onPress={handleSave} loading={saving} />
     </>
   );
 }
 
-function InterdayEditForm({ task, navigation }: { task: InterdayTask; navigation: any }) {
+function InterdayEditForm({ task, navigation, onNotesFocus }: { task: InterdayTask; navigation: any; onNotesFocus: () => void }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.notes ?? '');
   const [hasTime, setHasTime] = useState(!!task.timeSlot);
@@ -431,7 +434,7 @@ function InterdayEditForm({ task, navigation }: { task: InterdayTask; navigation
         </View>
       </FormField>
       <FormField label="Notes (optional)">
-        <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />
+        <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} onFocus={onNotesFocus} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />
       </FormField>
       <SaveButton onPress={handleSave} loading={saving} />
     </>
