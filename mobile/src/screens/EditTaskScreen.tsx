@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity,
-  Switch, Platform, KeyboardAvoidingView, ActivityIndicator,
+  Switch, Platform, KeyboardAvoidingView, ActivityIndicator, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -40,6 +40,25 @@ export default function EditTaskScreen() {
     });
   }, [route.params.taskId]);
 
+  // Must be declared before any conditional returns (Rules of Hooks)
+  const scrollRef = useRef<ScrollView>(null);
+  const notesFocused = useRef(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      if (notesFocused.current) scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      notesFocused.current = false;
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+
+  const onNotesFocus = () => {
+    notesFocused.current = true;
+    scrollRef.current?.scrollToEnd({ animated: true });
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -55,9 +74,6 @@ export default function EditTaskScreen() {
       </View>
     );
   }
-
-  const scrollRef = useRef<ScrollView>(null);
-  const onNotesFocus = () => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>

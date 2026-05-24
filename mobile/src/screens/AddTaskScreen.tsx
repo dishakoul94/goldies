@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity,
-  Switch, Platform, KeyboardAvoidingView,
+  Switch, Platform, KeyboardAvoidingView, Keyboard,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,7 +44,25 @@ export default function AddTaskScreen() {
   }, []);
 
   const scrollRef = useRef<ScrollView>(null);
-  const onNotesFocus = () => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  const notesFocused = useRef(false);
+
+  useEffect(() => {
+    // Scroll after keyboard is fully shown (fires ~300ms after focus, after layout settles)
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
+      if (notesFocused.current) scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    // Reset flag when keyboard is dismissed
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      notesFocused.current = false;
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+
+  const onNotesFocus = () => {
+    notesFocused.current = true;
+    // Also scroll immediately for the case where the keyboard is already visible
+    scrollRef.current?.scrollToEnd({ animated: true });
+  };
 
   return (
     <View style={styles.safe}>
