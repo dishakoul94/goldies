@@ -8,8 +8,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import DateTimePickerCompat from '../components/DateTimePickerCompat';
 import ServiceProviderPicker, { ProviderSelection } from '../components/ServiceProviderPicker';
+import AttachedListPicker from '../components/AttachedListPicker';
 import { format } from 'date-fns';
-import { RootStackParamList, TaskKind, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider, UserProfile, DEFAULT_REMINDER_TIMES } from '../types';
+import { RootStackParamList, TaskKind, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider, UserProfile, DEFAULT_REMINDER_TIMES, AttachedList } from '../types';
 import { addTask, addServiceProvider, getServiceProviderById, loadUserProfile } from '../storage';
 import {
   scheduleExternalTaskNotifications,
@@ -107,6 +108,7 @@ function ExternalForm({ navigation, defaultReminderTime, onNotesFocus }: { navig
   });
   const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
   const [providerSelection, setProviderSelection] = useState<ProviderSelection>({ type: 'none' });
+  const [attachedList, setAttachedList] = useState<AttachedList | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -154,6 +156,7 @@ function ExternalForm({ navigation, defaultReminderTime, onNotesFocus }: { navig
         dayOfReminder,
         reminderTime: format(reminderTimeValue, 'HH:mm'),
         serviceProviderId,
+        ...(attachedList ? { attachedList } : {}),
         notificationIds: [],
         createdAt: new Date().toISOString(),
       };
@@ -309,6 +312,10 @@ function ExternalForm({ navigation, defaultReminderTime, onNotesFocus }: { navig
         />
       </FormField>
 
+      <FormField label="Checklist (optional)">
+        <AttachedListPicker value={attachedList} onChange={setAttachedList} />
+      </FormField>
+
       <SaveButton onPress={handleSave} loading={saving} />
     </>
   );
@@ -329,6 +336,7 @@ function InternalForm({ navigation, defaultReminderTime, onNotesFocus }: { navig
     const d = new Date(); d.setHours(h, m, 0, 0); return d;
   });
   const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
+  const [attachedList, setAttachedList] = useState<AttachedList | null>(null);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -344,6 +352,7 @@ function InternalForm({ navigation, defaultReminderTime, onNotesFocus }: { navig
         intervalDays: isRecurring ? intervalDays : 0,
         earlyReminderDays,
         reminderTime: format(reminderTimeValue, 'HH:mm'),
+        ...(attachedList ? { attachedList } : {}),
         notificationIds: [],
         createdAt: new Date().toISOString(),
       };
@@ -467,6 +476,10 @@ function InternalForm({ navigation, defaultReminderTime, onNotesFocus }: { navig
         />
       </FormField>
 
+      <FormField label="Checklist (optional)">
+        <AttachedListPicker value={attachedList} onChange={setAttachedList} />
+      </FormField>
+
       <SaveButton onPress={handleSave} loading={saving} />
     </>
   );
@@ -483,6 +496,7 @@ function InterdayForm({ navigation, onNotesFocus }: { navigation: any; onNotesFo
   const [group, setGroup] = useState<InterdayGroup>('morning');
   const [activeDays, setActiveDays] = useState<number[]>([]);
   const [canDefer, setCanDefer] = useState(true);
+  const [attachedList, setAttachedList] = useState<AttachedList | null>(null);
   const [saving, setSaving] = useState(false);
 
   const toggleDay = (day: number) => {
@@ -506,6 +520,7 @@ function InterdayForm({ navigation, onNotesFocus }: { navigation: any; onNotesFo
         group,
         activeDays,
         canDefer,
+        ...(attachedList ? { attachedList } : {}),
         notificationIds: [],
         createdAt: new Date().toISOString(),
       };
@@ -608,6 +623,10 @@ function InterdayForm({ navigation, onNotesFocus }: { navigation: any; onNotesFo
           multiline
           numberOfLines={3}
         />
+      </FormField>
+
+      <FormField label="Checklist (optional)">
+        <AttachedListPicker value={attachedList} onChange={setAttachedList} />
       </FormField>
 
       <SaveButton onPress={handleSave} loading={saving} />

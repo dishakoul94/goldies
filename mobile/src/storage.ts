@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Task, ExternalTask, InternalTask, InterdayTask, ChatMessage, UserProfile, ServiceProvider } from './types';
+import { Task, ExternalTask, InternalTask, InterdayTask, ChatMessage, UserProfile, ServiceProvider, TemplateList } from './types';
 import { isToday, parseISO, addDays, isWithinInterval, format } from 'date-fns';
 import { getNow } from './utils/mockTime';
 
@@ -9,6 +9,7 @@ const KEYS = {
   USER_NAME: 'goldies_user_name',
   USER_PROFILE: 'goldies_profile',
   SERVICE_PROVIDERS: 'goldies_providers',
+  LISTS: 'goldies_lists',
 } as const;
 
 // ─── Task CRUD ──────────────────────────────────────────────────────────────
@@ -110,6 +111,37 @@ export async function deleteServiceProvider(providerId: string): Promise<void> {
 export async function getServiceProviderById(id: string): Promise<ServiceProvider | null> {
   const providers = await loadServiceProviders();
   return providers.find(p => p.id === id) ?? null;
+}
+
+// ─── Template lists ──────────────────────────────────────────────────────────
+
+export async function loadAllLists(): Promise<TemplateList[]> {
+  const raw = await AsyncStorage.getItem(KEYS.LISTS);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export async function saveAllLists(lists: TemplateList[]): Promise<void> {
+  await AsyncStorage.setItem(KEYS.LISTS, JSON.stringify(lists));
+}
+
+export async function addList(list: TemplateList): Promise<void> {
+  const lists = await loadAllLists();
+  await saveAllLists([...lists, list]);
+}
+
+export async function updateList(updated: TemplateList): Promise<void> {
+  const lists = await loadAllLists();
+  await saveAllLists(lists.map(l => (l.id === updated.id ? updated : l)));
+}
+
+export async function deleteList(listId: string): Promise<void> {
+  const lists = await loadAllLists();
+  await saveAllLists(lists.filter(l => l.id !== listId));
+}
+
+export async function getListById(id: string): Promise<TemplateList | null> {
+  const lists = await loadAllLists();
+  return lists.find(l => l.id === id) ?? null;
 }
 
 // ─── Pure query helpers (synchronous, operate on already-loaded tasks) ──────

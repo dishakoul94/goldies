@@ -75,6 +75,16 @@ export default function TaskCard({ task, onComplete, onDefer, onPress, onLongPre
               <View style={[styles.badge, { backgroundColor: barColor + '22' }]}>
                 <Text style={[styles.badgeText, { color: barColor }]}>{KIND_LABEL[task.kind]}</Text>
               </View>
+              {task.attachedList && (() => {
+                const done = task.attachedList.items.filter(i => i.completed).length;
+                const total = task.attachedList.items.length;
+                return (
+                  <View style={[styles.badge, { backgroundColor: COLORS.PRIMARY + '15', marginLeft: 6 }]}>
+                    <Ionicons name="list" size={11} color={COLORS.PRIMARY} />
+                    <Text style={[styles.badgeText, { color: COLORS.PRIMARY }]}> {done}/{total}</Text>
+                  </View>
+                );
+              })()}
             </View>
             <Text style={styles.title} numberOfLines={2}>{task.title}</Text>
             <Text style={styles.subtitle}>{getSubtitle(task)}</Text>
@@ -130,6 +140,8 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.XS,
   },
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: RADIUS.CHIP,
     paddingHorizontal: 10,
     paddingVertical: 3,

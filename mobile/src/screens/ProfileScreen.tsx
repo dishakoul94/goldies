@@ -292,6 +292,29 @@ export default function ProfileScreen() {
           ))
         )}
 
+        {/* ── Template Lists ── */}
+        <View style={[styles.sectionHeader, { marginTop: SPACING.LG }]}>
+          <Text style={styles.sectionTitle}>Template Lists</Text>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => navigation.navigate('Lists')}
+          >
+            <Ionicons name="list-outline" size={16} color={COLORS.PRIMARY} />
+            <Text style={styles.actionBtnText}>Manage</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Lists')}>
+          <View style={styles.profileRow}>
+            <Ionicons name="list-outline" size={20} color={COLORS.PRIMARY} style={styles.profileRowIcon} />
+            <View style={styles.profileRowText}>
+              <Text style={styles.profileRowLabel}>My Lists</Text>
+              <Text style={styles.profileRowValue}>Reusable checklists for any task</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.TEXT_MUTED} />
+          </View>
+        </TouchableOpacity>
+
         {/* ── Developer Settings ── */}
         <View style={[styles.sectionHeader, { marginTop: SPACING.LG }]}>
           <Text style={styles.sectionTitle}>Developer</Text>
