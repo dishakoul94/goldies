@@ -18,6 +18,7 @@ import AddTaskScreen from './src/screens/AddTaskScreen';
 import EditTaskScreen from './src/screens/EditTaskScreen';
 import TaskDetailScreen from './src/screens/TaskDetailScreen';
 import ServiceProviderFormScreen from './src/screens/ServiceProviderFormScreen';
+import ListsScreen from './src/screens/ListsScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -123,6 +124,11 @@ export default function App() {
               title: route.params?.providerId ? 'Edit Provider' : 'New Provider',
               presentation: 'modal',
             })}
+          />
+          <Stack.Screen
+            name="Lists"
+            component={ListsScreen}
+            options={{ title: 'My Lists' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

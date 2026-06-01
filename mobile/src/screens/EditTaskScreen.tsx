@@ -9,9 +9,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import DateTimePickerCompat from '../components/DateTimePickerCompat';
 import { format, parseISO } from 'date-fns';
-import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider, DEFAULT_REMINDER_TIMES } from '../types';
+import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, InterdayGroup, Recurrence, RecurrenceUnit, ServiceProvider, DEFAULT_REMINDER_TIMES, AttachedList } from '../types';
 import { getTaskById, updateTask, addServiceProvider, loadUserProfile } from '../storage';
 import ServiceProviderPicker, { ProviderSelection } from '../components/ServiceProviderPicker';
+import AttachedListPicker from '../components/AttachedListPicker';
 import { cancelNotifications, scheduleExternalTaskNotifications, scheduleInternalTaskNotification, scheduleInterdayTaskNotifications } from '../notifications';
 import { COLORS, FONT, SPACING, RADIUS } from '../utils/theme';
 import { showAlert } from '../utils/alert';
@@ -122,6 +123,7 @@ function ExternalEditForm({ task, navigation, defaultReminderTime, onNotesFocus 
       ? { type: 'existing', providerId: task.serviceProviderId }
       : { type: 'none' },
   );
+  const [attachedList, setAttachedList] = useState<AttachedList | null>(task.attachedList ?? null);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -158,6 +160,7 @@ function ExternalEditForm({ task, navigation, defaultReminderTime, onNotesFocus 
         dayOfReminder,
         reminderTime: format(reminderTimeValue, 'HH:mm'),
         serviceProviderId,
+        attachedList: attachedList ?? undefined,
         notificationIds: [],
       };
       const profile = await loadUserProfile();
@@ -254,6 +257,9 @@ function ExternalEditForm({ task, navigation, defaultReminderTime, onNotesFocus 
       <FormField label="Notes (optional)">
         <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} onFocus={onNotesFocus} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />
       </FormField>
+      <FormField label="Checklist (optional)">
+        <AttachedListPicker value={attachedList} onChange={setAttachedList} />
+      </FormField>
       <SaveButton onPress={handleSave} loading={saving} />
     </>
   );
@@ -273,6 +279,7 @@ function InternalEditForm({ task, navigation, defaultReminderTime, onNotesFocus 
     const d = new Date(); d.setHours(h, m, 0, 0); return d;
   });
   const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
+  const [attachedList, setAttachedList] = useState<AttachedList | null>(task.attachedList ?? null);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -283,7 +290,7 @@ function InternalEditForm({ task, navigation, defaultReminderTime, onNotesFocus 
       const updated: InternalTask = {
         ...task, title: title.trim(), notes: notes.trim() || undefined,
         nextDueDate: format(dueDate, 'yyyy-MM-dd'), intervalDays: isRecurring ? intervalDays : 0, earlyReminderDays,
-        reminderTime: format(reminderTimeValue, 'HH:mm'), notificationIds: [],
+        reminderTime: format(reminderTimeValue, 'HH:mm'), attachedList: attachedList ?? undefined, notificationIds: [],
       };
       const profile = await loadUserProfile();
       const ids = await scheduleInternalTaskNotification(updated, profile);
@@ -360,6 +367,9 @@ function InternalEditForm({ task, navigation, defaultReminderTime, onNotesFocus 
       <FormField label="Notes (optional)">
         <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} onFocus={onNotesFocus} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />
       </FormField>
+      <FormField label="Checklist (optional)">
+        <AttachedListPicker value={attachedList} onChange={setAttachedList} />
+      </FormField>
       <SaveButton onPress={handleSave} loading={saving} />
     </>
   );
@@ -375,6 +385,7 @@ function InterdayEditForm({ task, navigation, onNotesFocus }: { task: InterdayTa
   const [group, setGroup] = useState<InterdayGroup>(task.group);
   const [activeDays, setActiveDays] = useState<number[]>(task.activeDays);
   const [canDefer, setCanDefer] = useState(task.canDefer);
+  const [attachedList, setAttachedList] = useState<AttachedList | null>(task.attachedList ?? null);
   const [saving, setSaving] = useState(false);
 
   const toggleDay = (day: number) => setActiveDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
@@ -387,7 +398,7 @@ function InterdayEditForm({ task, navigation, onNotesFocus }: { task: InterdayTa
       const updated: InterdayTask = {
         ...task, title: title.trim(), notes: notes.trim() || undefined,
         timeSlot: hasTime ? format(timeValue, 'HH:mm') : undefined,
-        group, activeDays, canDefer, notificationIds: [],
+        group, activeDays, canDefer, attachedList: attachedList ?? undefined, notificationIds: [],
       };
       const profile = await loadUserProfile();
       const ids = await scheduleInterdayTaskNotifications(updated, profile);
@@ -451,6 +462,9 @@ function InterdayEditForm({ task, navigation, onNotesFocus }: { task: InterdayTa
       </FormField>
       <FormField label="Notes (optional)">
         <TextInput style={[styles.input, styles.notesInput]} value={notes} onChangeText={setNotes} onFocus={onNotesFocus} placeholder="Any extra details..." placeholderTextColor={COLORS.TEXT_MUTED} multiline numberOfLines={3} />
+      </FormField>
+      <FormField label="Checklist (optional)">
+        <AttachedListPicker value={attachedList} onChange={setAttachedList} />
       </FormField>
       <SaveButton onPress={handleSave} loading={saving} />
     </>

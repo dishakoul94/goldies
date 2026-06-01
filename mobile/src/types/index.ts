@@ -53,6 +53,7 @@ export interface ExternalTask {
   dayOfReminder: boolean;
   reminderTime?: string;      // "HH:mm" override; falls back to profile defaultTime
   serviceProviderId?: string;
+  attachedList?: AttachedList;
   notificationIds: string[];
   createdAt: string;
   completedAt?: string;
@@ -67,6 +68,7 @@ export interface InternalTask {
   intervalDays: number;       // 0 = one-time
   earlyReminderDays?: number[];  // days before nextDueDate to send an early notification
   reminderTime?: string;      // "HH:mm" override; falls back to profile defaultTime
+  attachedList?: AttachedList;
   notificationIds: string[];
   createdAt: string;
   completedAt?: string;
@@ -82,9 +84,35 @@ export interface InterdayTask {
   activeDays: number[];       // 0=Sun…6=Sat; [] = every day
   canDefer: boolean;
   deferredUntil?: string;     // ISO date
+  attachedList?: AttachedList;
   notificationIds: string[];
   createdAt: string;
   archivedAt?: string;
+}
+
+export interface TemplateListItem {
+  id: string;
+  title: string;
+}
+
+export interface TemplateList {
+  id: string;
+  name: string;
+  items: TemplateListItem[];
+  createdAt: string;
+}
+
+export interface AttachedListItem {
+  id: string;
+  title: string;
+  completed: boolean;
+  isCustom?: boolean;
+}
+
+export interface AttachedList {
+  templateListId?: string;
+  name: string;
+  items: AttachedListItem[];
 }
 
 export type Task = ExternalTask | InternalTask | InterdayTask;
@@ -160,4 +188,5 @@ export type RootStackParamList = {
   EditTask: { taskId: string };
   TaskDetail: { taskId: string };
   ServiceProviderForm: { providerId?: string };
+  Lists: undefined;
 };

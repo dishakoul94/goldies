@@ -8,7 +8,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { format, parseISO, addDays } from 'date-fns';
-import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, ServiceProvider } from '../types';
+import { RootStackParamList, Task, ExternalTask, InternalTask, InterdayTask, ServiceProvider, AttachedList } from '../types';
 import { getTaskById, updateTask, deleteTask, loadAllTasks, getServiceProviderById } from '../storage';
 import {
   cancelNotifications, scheduleInternalTaskNotification,
@@ -89,6 +89,17 @@ export default function TaskDetailScreen() {
     setTask(refreshed);
   };
 
+  const handleItemToggle = async (itemId: string) => {
+    if (!task?.attachedList) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const updatedItems = task.attachedList.items.map(i =>
+      i.id === itemId ? { ...i, completed: !i.completed } : i,
+    );
+    const updated = { ...task, attachedList: { ...task.attachedList, items: updatedItems } } as Task;
+    await updateTask(updated);
+    setTask(updated);
+  };
+
   const handleDelete = () => {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     showConfirm(
@@ -131,6 +142,11 @@ export default function TaskDetailScreen() {
           ) : null}
         </View>
 
+        {/* Attached checklist */}
+        {task.attachedList && (
+          <AttachedListSection list={task.attachedList} onItemToggle={handleItemToggle} />
+        )}
+
         {/* Actions */}
         {!isCompleted && (
           <View style={styles.actions}>
@@ -158,6 +174,41 @@ export default function TaskDetailScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function AttachedListSection({ list, onItemToggle }: { list: AttachedList; onItemToggle: (id: string) => void }) {
+  const done = list.items.filter(i => i.completed).length;
+  const total = list.items.length;
+  return (
+    <View style={styles.listCard}>
+      <View style={styles.listHeader}>
+        <Ionicons name="list" size={18} color={COLORS.PRIMARY} />
+        <Text style={styles.listTitle}>{list.name}</Text>
+        <Text style={styles.listProgress}>{done}/{total}</Text>
+      </View>
+      {list.items.map(item => (
+        <TouchableOpacity
+          key={item.id}
+          style={styles.listItemRow}
+          onPress={() => onItemToggle(item.id)}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={item.completed ? 'checkbox' : 'square-outline'}
+            size={22}
+            color={item.completed ? COLORS.INTERDAY : COLORS.BORDER}
+          />
+          <Text style={[styles.listItemText, item.completed && styles.listItemTextDone]}>
+            {item.title}
+          </Text>
+          {item.isCustom && <Text style={styles.customTag}>custom</Text>}
+        </TouchableOpacity>
+      ))}
+      {list.items.length === 0 && (
+        <Text style={styles.listEmpty}>No items in this checklist.</Text>
+      )}
+    </View>
   );
 }
 
@@ -254,6 +305,20 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.SM },
   metaLabel: { fontSize: FONT.CAPTION, color: COLORS.TEXT_MUTED, fontWeight: '600' },
   metaValue: { fontSize: FONT.BODY_SM, color: COLORS.TEXT, fontWeight: '500', marginTop: 2 },
+  listCard: {
+    backgroundColor: COLORS.WHITE, borderRadius: RADIUS.CARD, padding: SPACING.MD,
+    marginBottom: SPACING.LG, shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
+  },
+  listHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.XS, marginBottom: SPACING.SM },
+  listTitle: { flex: 1, fontSize: FONT.BODY_SM, fontWeight: '700', color: COLORS.TEXT },
+  listProgress: { fontSize: FONT.CAPTION, color: COLORS.TEXT_MUTED, fontWeight: '600' },
+  listItemRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.SM, paddingVertical: 8 },
+  listItemText: { flex: 1, fontSize: FONT.BODY_SM, color: COLORS.TEXT },
+  listItemTextDone: { color: COLORS.TEXT_MUTED, textDecorationLine: 'line-through' },
+  customTag: { fontSize: FONT.CAPTION, color: COLORS.TEXT_MUTED, fontStyle: 'italic' },
+  listEmpty: { fontSize: FONT.CAPTION, color: COLORS.TEXT_MUTED, fontStyle: 'italic', marginTop: 4 },
+
   actions: { gap: SPACING.SM },
   actionBtn: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.SM,
