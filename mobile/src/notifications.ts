@@ -86,8 +86,8 @@ export async function scheduleExternalTaskNotifications(task: ExternalTask, prof
       if (!isBefore(earlyDate, now)) {
         const id = await Notifications.scheduleNotificationAsync({
           content: {
-            title: 'Upcoming Appointment',
-            body: `"${task.title}" is in ${days} day${days > 1 ? 's' : ''}.`,
+            title: task.title,
+            body: `Appointment in ${days} day${days > 1 ? 's' : ''}.`,
             sound: true,
             data: { taskId: task.id },
           },
@@ -133,8 +133,8 @@ export async function scheduleInternalTaskNotification(task: InternalTask, profi
     if (!isBefore(earlyDate, now)) {
       const id = await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'Upcoming To-Do',
-          body: `"${task.title}" is due in ${days} day${days > 1 ? 's' : ''}.`,
+          title: task.title,
+          body: `Due in ${days} day${days > 1 ? 's' : ''}.`,
           sound: true,
           data: { taskId: task.id },
         },
@@ -148,7 +148,7 @@ export async function scheduleInternalTaskNotification(task: InternalTask, profi
   dueDate.setHours(hour, minute, 0, 0);
   if (!isBefore(dueDate, now)) {
     const id = await Notifications.scheduleNotificationAsync({
-      content: { title: 'Reminder', body: task.title, sound: true, data: { taskId: task.id } },
+      content: { title: task.title, body: 'Due today', sound: true, data: { taskId: task.id } },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: toFutureDate(dueDate) },
     });
     ids.push(id);
